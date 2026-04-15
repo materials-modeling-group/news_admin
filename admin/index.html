@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>News Admin - Materials Modeling Group</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Noto Sans JP', 'Inter', sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
+    .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; width: 100%; overflow: hidden; }
+    .layout { display: flex; gap: 1.5rem; align-items: flex-start; }
+    .col-list { flex: 3; min-width: 0; overflow: hidden; }
+    .col-form { flex: 7; min-width: 0; position: sticky; top: 1rem; }
+    @media (max-width: 900px) {
+      .layout { flex-direction: column-reverse; gap: 1rem; }
+      .col-list, .col-form { width: 100%; flex: none; position: static; }
+    }
+    @media (max-width: 480px) {
+      .container { padding: 0 0.5rem; margin: 1rem auto; }
+      .card { padding: 1rem; }
+      h1 { font-size: 1.2rem; }
+      .subtitle { font-size: 0.75rem; margin-bottom: 1rem; }
+    }
+    h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; color: #1a1a1a; }
+    .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 2rem; }
+    .card { background: #fff; border-radius: 8px; padding: 2rem; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem; }
+    .card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: #1a1a1a; }
+    .field { margin-bottom: 1.2rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; color: #1a1a1a; margin-bottom: 0.3rem; }
+    label .hint { font-weight: 400; color: #999; font-size: 0.75rem; display: block; margin-top: 0.1rem; }
+    input[type="text"], input[type="date"], select, textarea {
+      width: 100%; padding: 0.5rem 0.7rem; border: 1px solid #ddd; border-radius: 4px;
+      font-size: 0.88rem; font-family: inherit; transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #c83c2d; }
+    textarea { min-height: 80px; resize: vertical; }
+    .btn { display: inline-block; padding: 0.6rem 1.2rem; border: none; border-radius: 4px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    .btn-primary { background: #c83c2d; color: #fff; width: 100%; }
+    .btn-primary:hover { background: #a02e22; }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+    .btn-edit { background: #4a7a2e; color: #fff; font-size: 0.78rem; padding: 0.35rem 0.8rem; }
+    .btn-edit:hover { background: #3a6224; }
+    .btn-delete { background: transparent; color: #c83c2d; border: 1px solid #c83c2d; font-size: 0.78rem; padding: 0.35rem 0.8rem; }
+    .btn-delete:hover { background: #fbe9e7; }
+    .btn-cancel { background: #eee; color: #666; font-size: 0.78rem; padding: 0.35rem 0.8rem; }
+    .btn-cancel:hover { background: #ddd; }
+    .btn-save { background: #c83c2d; color: #fff; font-size: 0.78rem; padding: 0.35rem 0.8rem; }
+    .btn-save:hover { background: #a02e22; }
+    .message { margin-top: 1rem; padding: 0.7rem 1rem; border-radius: 4px; font-size: 0.85rem; display: none; }
+    .message.success { display: block; background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+    .message.error { display: block; background: #fbe9e7; color: #c62828; border: 1px solid #ef9a9a; }
+    .back-link { display: inline-block; margin-top: 1rem; color: #888; font-size: 0.8rem; text-decoration: none; }
+    .back-link:hover { color: #c83c2d; }
+    /* フィルタ */
+    .filters { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; }
+    .filters select { padding: 0.3rem 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.78rem; font-family: inherit; }
+    .filters select:focus { outline: none; border-color: #c83c2d; }
+    /* 投稿一覧 */
+    .news-item { border: 1px solid #eee; border-radius: 6px; padding: 0.8rem; margin-bottom: 0.6rem; transition: box-shadow 0.2s; overflow: hidden; }
+    .news-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .news-item-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; gap: 0.3rem; }
+    .news-item-meta { display: flex; gap: 0.4rem; align-items: center; min-width: 0; }
+    .news-item-meta .cat { background: #f0f0f0; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.68rem; color: #666; white-space: nowrap; }
+    .news-item-meta .dt { font-size: 0.7rem; color: #999; white-space: nowrap; }
+    .news-item-title { font-size: 0.82rem; font-weight: 600; color: #1a1a1a; margin-bottom: 0.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .news-item-body { font-size: 0.72rem; color: #888; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .news-item-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+    .loading { text-align: center; color: #999; padding: 2rem; font-size: 0.85rem; }
+    /* 編集フォーム（インライン） */
+    .edit-form { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid #eee; }
+    .edit-form .field { margin-bottom: 0.8rem; }
+    .edit-form label { font-size: 0.78rem; }
+    .edit-form input, .edit-form select, .edit-form textarea { font-size: 0.82rem; padding: 0.4rem 0.6rem; }
+    .edit-form textarea { min-height: 60px; }
+    .edit-actions { display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap; }
+    .confirm-delete { margin-top: 0.5rem; padding: 0.6rem; background: #fff5f5; border-radius: 4px; font-size: 0.82rem; color: #c62828; display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+    .confirm-delete .btn { margin-left: 0; }
+    /* ログイン画面 */
+    .login-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: #f5f5f5; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .login-overlay.hidden { display: none; }
+    .login-box {
+      background: #fff; border-radius: 8px; padding: 2.5rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 340px; max-width: calc(100% - 2rem); text-align: center;
+    }
+    .login-box h2 { font-size: 1.2rem; margin-bottom: 0.3rem; }
+    .login-box .login-sub { color: #999; font-size: 0.78rem; margin-bottom: 1.5rem; }
+    .login-box .field { text-align: left; margin-bottom: 1rem; }
+    .login-box input[type="text"], .login-box input[type="password"] {
+      width: 100%; padding: 0.6rem 0.8rem; border: 1px solid #ddd;
+      border-radius: 4px; font-size: 0.9rem; font-family: inherit;
+    }
+    .login-box input:focus { outline: none; border-color: #c83c2d; }
+    .login-box .btn-login {
+      width: 100%; padding: 0.7rem; background: #c83c2d; color: #fff;
+      border: none; border-radius: 4px; font-size: 0.95rem; font-weight: 600;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .login-box .btn-login:hover { background: #a02e22; }
+    .login-error { color: #c62828; font-size: 0.8rem; margin-top: 0.8rem; display: none; }
+    .admin-content.locked { display: none; }
+  </style>
+</head>
+<body>
+  <!-- ログイン画面 -->
+  <div class="login-overlay" id="login-overlay">
+    <div class="login-box">
+      <h2>News Admin</h2>
+      <p class="login-sub">Materials Modeling Group</p>
+      <form id="login-form">
+        <div class="field">
+          <label>ID</label>
+          <input type="text" id="login-id" autocomplete="username">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="login-pw" autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-login">ログイン</button>
+      </form>
+      <p class="login-error" id="login-error">IDまたはパスワードが正しくありません</p>
+    </div>
+  </div>
+
+  <!-- 管理画面本体 -->
+  <div class="container admin-content locked" id="admin-content">
+    <h1>News Admin</h1>
+    <p class="subtitle">Materials Modeling Group - ニュース管理</p>
+
+    <div class="layout">
+      <!-- 左: 投稿一覧 -->
+      <div class="col-list">
+        <div class="card">
+          <h2>投稿一覧</h2>
+          <div class="filters">
+            <select id="filter-year" onchange="renderList()">
+              <option value="">すべての年</option>
+            </select>
+            <select id="filter-category" onchange="renderList()">
+              <option value="">すべてのカテゴリ</option>
+            </select>
+            <span id="filter-count" style="font-size:0.75rem;color:#999;margin-left:0.3rem;"></span>
+          </div>
+          <div id="news-list">
+            <p class="loading">読み込み中...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右: 新規投稿 -->
+      <div class="col-form">
+        <div class="card">
+          <h2>新規投稿</h2>
+          <form id="news-form">
+            <div class="field">
+              <label>日付</label>
+              <input type="date" id="date">
+            </div>
+            <div class="field">
+              <label>カテゴリ</label>
+              <select id="category">
+                <option value="">選択してください</option>
+                <option value="お知らせ">お知らせ / Announcement</option>
+                <option value="プレスリリース">プレスリリース / Press Release</option>
+                <option value="受賞">受賞 / Award</option>
+                <option value="メディア">メディア / Media</option>
+                <option value="イベント">イベント / Event</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>タイトル（日本語）</label>
+              <input type="text" id="title_ja">
+            </div>
+            <div class="field">
+              <label>タイトル（英語）</label>
+              <input type="text" id="title_en">
+            </div>
+            <div class="field">
+              <label>関連URL<span class="hint">受賞・プレスリリース等のリンク先URL。指定するとタイトルがリンクになります</span></label>
+              <input type="text" id="url" placeholder="https://www.nims.go.jp/press/2025/04/202504150.html">
+            </div>
+            <div class="field">
+              <label>論文/講演タイトル<span class="hint">論文の正式タイトルまたは講演タイトル。DOIを併せて指定するとDOIリンクになります</span></label>
+              <input type="text" id="paper_title" placeholder="Modular metamaterials with deep learning...">
+            </div>
+            <div class="field">
+              <label>DOI<span class="hint">論文DOI（例: 10.1016/j.matdes.2026.115584）。論文以外は空欄</span></label>
+              <input type="text" id="doi" placeholder="10.1016/j.matdes.2026.115584">
+            </div>
+            <div class="field">
+              <label>学会名<span class="hint">招待講演の場合に入力。学会名・日時・発表者から本文が自動構成されます（本文欄が空の場合）</span></label>
+              <input type="text" id="event_name" placeholder="XVIII International Conference on Computational Plasticity">
+            </div>
+            <div class="field">
+              <label>発表者<span class="hint">招待講演の場合に入力（例: Ikumu Watanabe）</span></label>
+              <input type="text" id="presenters" placeholder="Ikumu Watanabe">
+            </div>
+            <div class="field">
+              <label>本文（日本語）<span class="hint">直接入力、または上の学会名・発表者欄から自動構成。リンク: &lt;a href="URL" target="_blank"&gt;テキスト&lt;/a&gt;</span></label>
+              <textarea id="body_ja"></textarea>
+            </div>
+            <div class="field">
+              <label>本文（英語）<span class="hint">Links: &lt;a href="URL" target="_blank"&gt;text&lt;/a&gt;</span></label>
+              <textarea id="body_en"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" id="submit-btn">投稿する</button>
+          </form>
+          <div class="message" id="message"></div>
+        </div>
+        <a href="../index.html" class="back-link">← ホームページに戻る</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── 認証 ──
+    var AUTH_HASH = '689813bce2ef03cec19b7ff3573373d7051931338043071b0b6c778a0e297b1f';
+
+    async function sha256(text) {
+      var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return Array.from(new Uint8Array(buf)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+    }
+
+    // セッション確認
+    if (sessionStorage.getItem('admin_auth') === AUTH_HASH) {
+      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('admin-content').classList.remove('locked');
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      var id = document.getElementById('login-id').value;
+      var pw = document.getElementById('login-pw').value;
+      var hash = await sha256(id + ':' + pw);
+      if (hash === AUTH_HASH) {
+        sessionStorage.setItem('admin_auth', AUTH_HASH);
+        document.getElementById('login-overlay').classList.add('hidden');
+        document.getElementById('admin-content').classList.remove('locked');
+        loadNews();
+      } else {
+        document.getElementById('login-error').style.display = 'block';
+      }
+    });
+
+    var GAS_URL = 'https://script.google.com/macros/s/AKfycbx_u67JnXKn5Fb3tcD6fQyn1as28Im6gcgdK7Mb9UAD6V3jCS2-Qn7tJYK14P9UN6qB/exec';
+
+    var CATEGORY_EN = {
+      'お知らせ': 'Announcement', 'プレスリリース': 'Press Release',
+      '受賞': 'Award', 'メディア': 'Media', 'イベント': 'Event'
+    };
+    var CATEGORY_EN_TO_JA = {};
+    Object.keys(CATEGORY_EN).forEach(function(k) { CATEGORY_EN_TO_JA[CATEGORY_EN[k]] = k; });
+
+    var newsList = [];
+
+    // ── 一覧読み込み ──
+    function loadNews() {
+      var listEl = document.getElementById('news-list');
+      listEl.innerHTML = '<p class="loading">読み込み中...</p>';
+      fetch(GAS_URL)
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+          if (res.status !== 'ok') throw new Error(res.message);
+          newsList = res.data;
+          buildFilterOptions();
+          renderList();
+        })
+        .catch(function(err) {
+          listEl.innerHTML = '<p class="loading">読み込みに失敗しました: ' + err.message + '</p>';
+        });
+    }
+
+    function buildFilterOptions() {
+      var years = {};
+      var categories = {};
+      newsList.forEach(function(item) {
+        var y = (item.date || '').substring(0, 4);
+        if (y) years[y] = true;
+        var c = item.category || '';
+        if (c) categories[c] = true;
+      });
+      var yearSel = document.getElementById('filter-year');
+      var curYear = yearSel.value;
+      yearSel.innerHTML = '<option value="">すべての年</option>';
+      Object.keys(years).sort().reverse().forEach(function(y) {
+        yearSel.innerHTML += '<option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '年</option>';
+      });
+      var catSel = document.getElementById('filter-category');
+      var curCat = catSel.value;
+      catSel.innerHTML = '<option value="">すべてのカテゴリ</option>';
+      Object.keys(categories).sort().forEach(function(c) {
+        catSel.innerHTML += '<option value="' + esc(c) + '"' + (c === curCat ? ' selected' : '') + '>' + esc(c) + '</option>';
+      });
+    }
+
+    function renderList() {
+      var listEl = document.getElementById('news-list');
+      if (!newsList.length) { listEl.innerHTML = '<p class="loading">ニュースはありません</p>'; return; }
+
+      var filterYear = document.getElementById('filter-year').value;
+      var filterCat = document.getElementById('filter-category').value;
+
+      listEl.innerHTML = '';
+      var shown = 0;
+      newsList.forEach(function(item, i) {
+        if (filterYear && !(item.date || '').startsWith(filterYear)) return;
+        if (filterCat && item.category !== filterCat) return;
+        shown++;
+
+        var div = document.createElement('div');
+        div.className = 'news-item';
+        div.id = 'news-item-' + i;
+        div.innerHTML =
+          '<div class="news-item-header">' +
+            '<div class="news-item-meta">' +
+              '<span class="cat">' + esc(item.category) + '</span>' +
+              '<span class="dt">' + esc(item.date) + '</span>' +
+            '</div>' +
+            '<div class="news-item-actions">' +
+              '<button class="btn btn-edit" onclick="startEdit(' + i + ')">編集</button>' +
+              '<button class="btn btn-delete" onclick="confirmDelete(' + i + ')">削除</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="news-item-title">' + esc(item.title) + '</div>' +
+          '<div class="news-item-body">' + esc(item.title_en) + '</div>' +
+          '<div id="edit-area-' + i + '"></div>';
+        listEl.appendChild(div);
+      });
+
+      document.getElementById('filter-count').textContent = shown + ' / ' + newsList.length + '件';
+      if (!shown) listEl.innerHTML = '<p class="loading">該当するニュースはありません</p>';
+    }
+
+    function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+    function formatDateJa(iso) {
+      if (!iso) return '';
+      var p = iso.split('-');
+      return parseInt(p[0]) + '年' + parseInt(p[1]) + '月' + parseInt(p[2]) + '日';
+    }
+
+    // ── 編集 ──
+    function startEdit(index) {
+      var item = newsList[index];
+      var area = document.getElementById('edit-area-' + index);
+      var bodyJa = (item.body || '').replace(/<br>/g, '\n');
+      var bodyEn = (item.body_en || '').replace(/<br>/g, '\n');
+      area.innerHTML =
+        '<div class="edit-form">' +
+          '<div class="field"><label>日付</label><input type="date" id="edit-date-' + index + '" value="' + esc(item.date) + '"></div>' +
+          '<div class="field"><label>カテゴリ</label>' + buildCategorySelect('edit-cat-' + index, item.category) + '</div>' +
+          '<div class="field"><label>タイトル（日本語）</label><input type="text" id="edit-title-ja-' + index + '" value="' + esc(item.title) + '"></div>' +
+          '<div class="field"><label>タイトル（英語）</label><input type="text" id="edit-title-en-' + index + '" value="' + esc(item.title_en) + '"></div>' +
+          '<div class="field"><label>関連URL</label><input type="text" id="edit-url-' + index + '" value="' + esc(item.url) + '" placeholder="https://www.nims.go.jp/press/..."></div>' +
+          '<div class="field"><label>論文/講演タイトル</label><input type="text" id="edit-paper-title-' + index + '" value="' + esc(item.paper_title) + '" placeholder="Modular metamaterials with deep learning..."></div>' +
+          '<div class="field"><label>DOI</label><input type="text" id="edit-doi-' + index + '" value="' + esc(item.doi) + '" placeholder="10.1016/j.matdes.2026.115584"></div>' +
+          '<div class="field"><label>本文（日本語）</label><textarea id="edit-body-ja-' + index + '">' + esc(bodyJa) + '</textarea></div>' +
+          '<div class="field"><label>本文（英語）</label><textarea id="edit-body-en-' + index + '">' + esc(bodyEn) + '</textarea></div>' +
+          '<div class="edit-actions">' +
+            '<button class="btn btn-cancel" onclick="cancelEdit(' + index + ')">キャンセル</button>' +
+            '<button class="btn btn-save" onclick="saveEdit(' + index + ')">保存</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function buildCategorySelect(id, current) {
+      var opts = ['お知らせ', 'プレスリリース', '受賞', 'メディア', 'イベント'];
+      var html = '<select id="' + id + '">';
+      opts.forEach(function(o) {
+        html += '<option value="' + o + '"' + (o === current ? ' selected' : '') + '>' + o + ' / ' + CATEGORY_EN[o] + '</option>';
+      });
+      return html + '</select>';
+    }
+
+    function cancelEdit(index) {
+      document.getElementById('edit-area-' + index).innerHTML = '';
+    }
+
+    function saveEdit(index) {
+      var cat = document.getElementById('edit-cat-' + index).value;
+      var entry = {
+        date: document.getElementById('edit-date-' + index).value,
+        category: cat,
+        category_en: CATEGORY_EN[cat] || cat,
+        title: document.getElementById('edit-title-ja-' + index).value,
+        title_en: document.getElementById('edit-title-en-' + index).value,
+        url: document.getElementById('edit-url-' + index).value.trim(),
+        paper_title: document.getElementById('edit-paper-title-' + index).value.trim(),
+        doi: document.getElementById('edit-doi-' + index).value.trim(),
+        body: document.getElementById('edit-body-ja-' + index).value,
+        body_en: document.getElementById('edit-body-en-' + index).value
+      };
+
+      sendAction({ action: 'edit', index: index, entry: entry }, '編集しました', function() { loadNews(); });
+    }
+
+    // ── 削除 ──
+    function confirmDelete(index) {
+      var area = document.getElementById('edit-area-' + index);
+      area.innerHTML =
+        '<div class="confirm-delete">' +
+          'この投稿を削除しますか？' +
+          '<button class="btn btn-cancel" onclick="cancelEdit(' + index + ')">キャンセル</button>' +
+          '<button class="btn btn-delete" onclick="doDelete(' + index + ')">削除する</button>' +
+        '</div>';
+    }
+
+    function doDelete(index) {
+      sendAction({ action: 'delete', index: index }, '削除しました', function() { loadNews(); });
+    }
+
+    // ── 新規投稿 ──
+    document.getElementById('news-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('submit-btn');
+      btn.disabled = true; btn.textContent = '送信中...';
+
+      var cat = document.getElementById('category').value;
+      var dateVal = document.getElementById('date').value;
+      var eventName = document.getElementById('event_name').value.trim();
+      var presentersVal = document.getElementById('presenters').value.trim();
+      var manualBody = document.getElementById('body_ja').value;
+
+      // 学会名が入力されていれば招待講演の本文を自動生成
+      var bodyJa = manualBody;
+      if (eventName) {
+        var lines = [];
+        lines.push('学会名：' + eventName);
+        if (dateVal) lines.push('日時：' + formatDateJa(dateVal));
+        if (presentersVal) lines.push('発表者：' + presentersVal);
+        if (manualBody) lines.push(manualBody);
+        bodyJa = lines.join('\n');
+      }
+
+      var payload = {
+        action: 'add',
+        date: dateVal,
+        category: cat,
+        category_en: CATEGORY_EN[cat] || cat,
+        title: document.getElementById('title_ja').value,
+        title_en: document.getElementById('title_en').value,
+        url: document.getElementById('url').value.trim(),
+        paper_title: document.getElementById('paper_title').value.trim(),
+        doi: document.getElementById('doi').value.trim(),
+        body: bodyJa,
+        body_en: document.getElementById('body_en').value
+      };
+
+      sendAction(payload, '投稿しました', function() {
+        document.getElementById('news-form').reset();
+        loadNews();
+      }, function() {
+        btn.disabled = false; btn.textContent = '投稿する';
+      });
+    });
+
+    // ── GASへの送信 ──
+    function sendAction(payload, successMsg, onSuccess, onFinally) {
+      fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.status !== 'ok') throw new Error(res.message);
+        showMessage('success', successMsg + '（反映まで数分かかります）');
+        if (onSuccess) onSuccess();
+      })
+      .catch(function(err) {
+        showMessage('error', '失敗しました: ' + err.message);
+      })
+      .finally(function() {
+        var btn = document.getElementById('submit-btn');
+        btn.disabled = false; btn.textContent = '投稿する';
+        if (onFinally) onFinally();
+      });
+    }
+
+    function showMessage(type, text) {
+      var el = document.getElementById('message');
+      el.className = 'message ' + type;
+      el.textContent = text;
+    }
+
+    // ── 初期読み込み（ログイン済みの場合のみ） ──
+    if (sessionStorage.getItem('admin_auth') === AUTH_HASH) {
+      loadNews();
+    }
+  </script>
+</body>
+</html>

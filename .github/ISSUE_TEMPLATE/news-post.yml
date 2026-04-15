@@ -1,0 +1,105 @@
+name: "News投稿"
+description: "ニュースを追加する（フォーム入力で簡単に投稿できます）"
+title: "[News] "
+labels: ["news"]
+body:
+  - type: input
+    id: date
+    attributes:
+      label: "日付"
+      description: "YYYY-MM-DD 形式で入力してください"
+      placeholder: "2026-04-01"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: "カテゴリ"
+      options:
+        - お知らせ / Announcement
+        - プレスリリース / Press Release
+        - 受賞 / Award
+        - メディア / Media
+        - イベント / Event
+    validations:
+      required: true
+
+  - type: input
+    id: title_ja
+    attributes:
+      label: "タイトル（日本語）"
+      placeholder: "○○研究員が△△賞を受賞"
+    validations:
+      required: true
+
+  - type: input
+    id: title_en
+    attributes:
+      label: "タイトル（英語）"
+      placeholder: "Researcher XX received YY Award"
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: "関連URL"
+      description: "受賞・プレスリリース等のリンク先URL。指定するとタイトルがリンクになります。"
+      placeholder: "https://www.nims.go.jp/press/2025/04/202504150.html"
+    validations:
+      required: false
+
+  - type: input
+    id: paper_title
+    attributes:
+      label: "論文/講演タイトル"
+      description: "論文の正式タイトルまたは講演タイトル。DOIを併せて指定するとDOIリンクになります。"
+      placeholder: "Modular metamaterials with deep learning..."
+    validations:
+      required: false
+
+  - type: input
+    id: doi
+    attributes:
+      label: "DOI"
+      description: "論文DOI（例: 10.1016/j.matdes.2026.115584）。論文以外は空欄でOK。"
+      placeholder: "10.1016/j.matdes.2026.115584"
+    validations:
+      required: false
+
+  - type: input
+    id: event_name
+    attributes:
+      label: "学会名"
+      description: "招待講演の場合に入力。入力すると本文に自動追加されます。"
+      placeholder: "XVIII International Conference on Computational Plasticity"
+    validations:
+      required: false
+
+  - type: input
+    id: presenters
+    attributes:
+      label: "発表者"
+      description: "招待講演の場合に入力。"
+      placeholder: "Ikumu Watanabe"
+    validations:
+      required: false
+
+  - type: textarea
+    id: body_ja
+    attributes:
+      label: "本文（日本語）"
+      description: "リンクを入れる場合: <a href=\"URL\" target=\"_blank\">リンクテキスト</a>"
+      placeholder: "ニュースの詳細を記入してください"
+    validations:
+      required: true
+
+  - type: textarea
+    id: body_en
+    attributes:
+      label: "本文（英語）"
+      description: "Links: <a href=\"URL\" target=\"_blank\">link text</a>"
+      placeholder: "Enter news details in English"
+    validations:
+      required: true

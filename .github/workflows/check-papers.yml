@@ -1,0 +1,36 @@
+name: Check new papers
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # 毎週月曜 00:00 UTC（日本時間 月曜 09:00）
+  workflow_dispatch:      # 手動実行も可能
+
+permissions:
+  contents: write
+
+jobs:
+  check-papers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check for new papers via CrossRef
+        run: python3 scripts/check_new_papers.py
+
+      - name: Check for changes
+        id: diff
+        run: |
+          git diff --quiet data/news.json || echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/news.json
+          git commit -m "新規論文を自動検出して追加"
+          git push
