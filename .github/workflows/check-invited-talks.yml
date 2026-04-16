@@ -21,9 +21,6 @@ jobs:
       - name: Check for new invited talks via SAMURAI
         run: python3 scripts/check_invited_talks.py
 
-      - name: Pull remote changes (GAS may have committed)
-        run: git pull --rebase origin main
-
       - name: Check for changes in known_talk_ids
         id: diff
         run: |
@@ -35,5 +32,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/known_talk_ids.json
+          git pull --rebase origin main
           git commit -m "招待講演の既知IDリストを更新"
           git push
