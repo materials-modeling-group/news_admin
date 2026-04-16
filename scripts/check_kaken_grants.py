@@ -227,6 +227,9 @@ def is_recent_grant(grant_info, current_year):
     return start_year >= current_year
 
 
+LOOKBACK_YEARS = 1  # 今年度に加えて過去何年度分までさかのぼるか
+
+
 def main():
     researchers = load_json(RESEARCHERS_PATH)
     known_ids = set(load_json(KNOWN_GRANTS_PATH))
@@ -235,8 +238,9 @@ def main():
     # 4月以前は前年度の採択もチェック
     if datetime.now().month < 4:
         current_year -= 1
+    threshold_year = current_year - LOOKBACK_YEARS
 
-    print(f"Checking KAKEN grants (start year >= {current_year})")
+    print(f"Checking KAKEN grants (start year >= {threshold_year})")
 
     new_grants = []
 
@@ -269,8 +273,8 @@ def main():
 
             time.sleep(1)
 
-            # 今年度以降の課題のみ
-            if not is_recent_grant(details, current_year):
+            # 閾値年度以降の課題のみ
+            if not is_recent_grant(details, threshold_year):
                 known_ids.add(gid)  # 古い課題もスキップ記録
                 continue
 
