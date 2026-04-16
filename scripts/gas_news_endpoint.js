@@ -7,7 +7,7 @@
  * 2. このファイルの内容をコピーして貼り付け
  * 3. スクリプトプロパティに以下を設定（歯車アイコン → スクリプトプロパティ）:
  *    - GITHUB_TOKEN : GitHubのPersonal Access Token（repoスコープ）
- *    - GITHUB_REPO  : atsumitanaka/group-homepage2-v2
+ *    - GITHUB_REPO  : materials-modeling-group/homepage
  * 4. デプロイ → 新しいデプロイ → ウェブアプリ
  *    - 実行するユーザー: 自分
  *    - アクセスできるユーザー: 全員
