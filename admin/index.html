@@ -236,9 +236,14 @@
       document.getElementById('login-overlay').classList.remove('hidden');
     }
 
-    // 渡したハッシュでGASにGETを送り、認証可否を判定する
+    // 渡したハッシュでGASに照会して認証可否を判定する
+    // ※ POSTで送る（GETはGAS側のCookieリダイレクトでクロスオリジンfetchが失敗するため）
     function verifyHashWithServer(hash) {
-      return fetch(GAS_URL + '?auth=' + encodeURIComponent(hash))
+      return fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'list', auth: hash })
+      })
         .then(function(r) { return r.json(); })
         .then(function(res) { return res.status === 'ok'; })
         .catch(function() { return false; });
@@ -288,7 +293,11 @@
     function loadNews() {
       var listEl = document.getElementById('news-list');
       listEl.innerHTML = '<p class="loading">読み込み中...</p>';
-      fetch(GAS_URL + '?auth=' + encodeURIComponent(getAuthHash()))
+      fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'list', auth: getAuthHash() })
+      })
         .then(function(r) { return r.json(); })
         .then(function(res) {
           if (res.status !== 'ok') {
