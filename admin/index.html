@@ -217,26 +217,56 @@
 
   <script>
     // ── 認証 ──
-    var AUTH_HASH = '689813bce2ef03cec19b7ff3573373d7051931338043071b0b6c778a0e297b1f';
+    // 認証情報の正解（ハッシュ）はGASのスクリプトプロパティ ADMIN_AUTH_HASH に保管されている。
+    // クライアント側にはハッシュを置かず、ログイン時にGASに照会して検証する。
+    var GAS_URL = 'https://script.google.com/macros/s/AKfycbx_u67JnXKn5Fb3tcD6fQyn1as28Im6gcgdK7Mb9UAD6V3jCS2-Qn7tJYK14P9UN6qB/exec';
 
     async function sha256(text) {
       var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
       return Array.from(new Uint8Array(buf)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
     }
 
-    // セッション確認
-    if (sessionStorage.getItem('admin_auth') === AUTH_HASH) {
-      document.getElementById('login-overlay').classList.add('hidden');
-      document.getElementById('admin-content').classList.remove('locked');
+    function getAuthHash() {
+      return sessionStorage.getItem('admin_auth_hash') || '';
     }
+
+    function lockUI() {
+      sessionStorage.removeItem('admin_auth_hash');
+      document.getElementById('admin-content').classList.add('locked');
+      document.getElementById('login-overlay').classList.remove('hidden');
+    }
+
+    // 渡したハッシュでGASにGETを送り、認証可否を判定する
+    function verifyHashWithServer(hash) {
+      return fetch(GAS_URL + '?auth=' + encodeURIComponent(hash))
+        .then(function(r) { return r.json(); })
+        .then(function(res) { return res.status === 'ok'; })
+        .catch(function() { return false; });
+    }
+
+    // セッションが残っていればサーバーに再確認する
+    (async function tryResumeSession() {
+      var stored = sessionStorage.getItem('admin_auth_hash');
+      if (!stored) return;
+      var ok = await verifyHashWithServer(stored);
+      if (ok) {
+        document.getElementById('login-overlay').classList.add('hidden');
+        document.getElementById('admin-content').classList.remove('locked');
+        loadNews();
+      } else {
+        sessionStorage.removeItem('admin_auth_hash');
+      }
+    })();
 
     document.getElementById('login-form').addEventListener('submit', async function(e) {
       e.preventDefault();
       var id = document.getElementById('login-id').value;
       var pw = document.getElementById('login-pw').value;
       var hash = await sha256(id + ':' + pw);
-      if (hash === AUTH_HASH) {
-        sessionStorage.setItem('admin_auth', AUTH_HASH);
+      var ok = await verifyHashWithServer(hash);
+      if (ok) {
+        sessionStorage.setItem('admin_auth_hash', hash);
+        document.getElementById('login-error').style.display = 'none';
         document.getElementById('login-overlay').classList.add('hidden');
         document.getElementById('admin-content').classList.remove('locked');
         loadNews();
@@ -244,8 +274,6 @@
         document.getElementById('login-error').style.display = 'block';
       }
     });
-
-    var GAS_URL = 'https://script.google.com/macros/s/AKfycbx_u67JnXKn5Fb3tcD6fQyn1as28Im6gcgdK7Mb9UAD6V3jCS2-Qn7tJYK14P9UN6qB/exec';
 
     var CATEGORY_EN = {
       'お知らせ': 'Announcement', 'プレスリリース': 'Press Release',
@@ -260,10 +288,16 @@
     function loadNews() {
       var listEl = document.getElementById('news-list');
       listEl.innerHTML = '<p class="loading">読み込み中...</p>';
-      fetch(GAS_URL)
+      fetch(GAS_URL + '?auth=' + encodeURIComponent(getAuthHash()))
         .then(function(r) { return r.json(); })
         .then(function(res) {
-          if (res.status !== 'ok') throw new Error(res.message);
+          if (res.status !== 'ok') {
+            if (res.message === 'Unauthorized') {
+              lockUI();
+              return;
+            }
+            throw new Error(res.message);
+          }
           newsList = res.data;
           buildFilterOptions();
           renderList();
@@ -459,6 +493,7 @@
 
     // ── GASへの送信 ──
     function sendAction(payload, successMsg, onSuccess, onFinally) {
+      payload.auth = getAuthHash();
       fetch(GAS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
@@ -466,7 +501,13 @@
       })
       .then(function(r) { return r.json(); })
       .then(function(res) {
-        if (res.status !== 'ok') throw new Error(res.message);
+        if (res.status !== 'ok') {
+          if (res.message === 'Unauthorized') {
+            lockUI();
+            throw new Error('セッションが切れました。再度ログインしてください。');
+          }
+          throw new Error(res.message);
+        }
         showMessage('success', successMsg + '（反映まで数分かかります）');
         if (onSuccess) onSuccess();
       })
@@ -484,11 +525,6 @@
       var el = document.getElementById('message');
       el.className = 'message ' + type;
       el.textContent = text;
-    }
-
-    // ── 初期読み込み（ログイン済みの場合のみ） ──
-    if (sessionStorage.getItem('admin_auth') === AUTH_HASH) {
-      loadNews();
     }
   </script>
 </body>
