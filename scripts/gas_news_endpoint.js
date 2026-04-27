@@ -45,7 +45,9 @@ function doGet(e) {
   }
 }
 
-// ── POST: 追加・編集・削除 ──
+// ── POST: 一覧取得・追加・編集・削除 ──
+// ※ ブラウザのクロスオリジンfetchではGETがGAS側のCookieリダイレクトで弾かれるため、
+//    一覧取得（list）もPOSTで受ける。
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
@@ -53,7 +55,11 @@ function doPost(e) {
     var action = data.action || "add";
     var result;
 
-    if (action === "add") {
+    if (action === "list") {
+      result = getNewsFromGitHub();
+      return ContentService.createTextOutput(JSON.stringify({ status: "ok", data: result }))
+        .setMimeType(ContentService.MimeType.JSON);
+    } else if (action === "add") {
       result = addNews(data);
     } else if (action === "edit") {
       result = editNews(data.index, data.entry);
