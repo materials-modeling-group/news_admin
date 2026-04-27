@@ -6,8 +6,9 @@
  * 1. https://script.google.com/ で新しいプロジェクトを作成
  * 2. このファイルの内容をコピーして貼り付け
  * 3. スクリプトプロパティに以下を設定（歯車アイコン → スクリプトプロパティ）:
- *    - GITHUB_TOKEN : GitHubのPersonal Access Token（repoスコープ）
- *    - GITHUB_REPO  : materials-modeling-group/homepage
+ *    - GITHUB_TOKEN     : GitHubのPersonal Access Token（repoスコープ）
+ *    - GITHUB_REPO      : materials-modeling-group/homepage
+ *    - ADMIN_AUTH_HASH  : SHA-256("id:pw") の16進文字列（Admin画面ログインの認証情報）
  * 4. デプロイ → 新しいデプロイ → ウェブアプリ
  *    - 実行するユーザー: 自分
  *    - アクセスできるユーザー: 全員
@@ -16,9 +17,25 @@
  * ※ コードを更新したら「デプロイを管理」→「新しいバージョン」で再デプロイ
  */
 
+// ── 認証 ──
+// 受信したハッシュをスクリプトプロパティ ADMIN_AUTH_HASH と一致するか検証する。
+// 一致しなければ Unauthorized 例外を投げる。
+function verifyAuth(authHash) {
+  var props = PropertiesService.getScriptProperties();
+  var expected = props.getProperty("ADMIN_AUTH_HASH");
+  if (!expected) {
+    throw new Error("Server is not configured: ADMIN_AUTH_HASH is missing");
+  }
+  if (!authHash || authHash !== expected) {
+    throw new Error("Unauthorized");
+  }
+}
+
 // ── GET: ニュース一覧を返す ──
 function doGet(e) {
   try {
+    var auth = (e && e.parameter && e.parameter.auth) || "";
+    verifyAuth(auth);
     var result = getNewsFromGitHub();
     return ContentService.createTextOutput(JSON.stringify({ status: "ok", data: result }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -32,6 +49,7 @@ function doGet(e) {
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
+    verifyAuth(data.auth || "");
     var action = data.action || "add";
     var result;
 

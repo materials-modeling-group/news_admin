@@ -39,7 +39,7 @@ news_admin/
 ## Admin画面の使い方
 
 ### ログイン
-`admin/index.html` を開いてID/パスワードを入力。認証はクライアント側のSHA-256ハッシュで照合。
+`admin/index.html` を開いてID/パスワードを入力。クライアント側で `SHA-256("id:pw")` を計算し、GASエンドポイントがスクリプトプロパティ `ADMIN_AUTH_HASH` と照合する。クライアントHTMLには正解ハッシュを保持しないため、URLを知っているだけでは API を直接呼び出せない。
 
 ### 新規投稿フィールド
 
@@ -116,14 +116,23 @@ news_admin/
 1. [script.google.com](https://script.google.com/) で新規プロジェクト作成
 2. `scripts/gas_news_endpoint.js` の内容を貼り付け
 3. **スクリプトプロパティ**を設定：
-   - `GITHUB_TOKEN`: GitHub Personal Access Token（`repo` スコープ）
+   - `GITHUB_TOKEN`: GitHub Personal Access Token（`repo` スコープ。fine-grained PATで `Contents: write` のみに絞ることを推奨）
    - `GITHUB_REPO`: `materials-modeling-group/homepage`
+   - `ADMIN_AUTH_HASH`: `SHA-256("id:pw")` の16進文字列。Admin画面のログインIDとパスワードを `:` で連結したもののハッシュ。例えばブラウザのコンソールで以下を実行して取得できる:
+     ```js
+     crypto.subtle.digest('SHA-256', new TextEncoder().encode('myid:mypassword'))
+       .then(b => console.log(Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,'0')).join('')))
+     ```
 4. **デプロイ → ウェブアプリ**（実行ユーザー: 自分 / アクセス: 全員）
 5. 発行されたURLを `admin/index.html` の `GAS_URL` 変数に設定
 
 ### 更新時
 
 `scripts/gas_news_endpoint.js` を変更したら、GAS上のコードも更新し「**デプロイを管理 → 新しいバージョン**」で再デプロイが必要です。
+
+### 認証情報のローテーション
+
+ID/パスワードを変更する場合は、新しい `SHA-256("id:pw")` を計算してスクリプトプロパティ `ADMIN_AUTH_HASH` を上書きするだけ。再デプロイは不要（プロパティはデプロイバージョンに紐づかない）。
 
 ## GitHub Issue による投稿
 
