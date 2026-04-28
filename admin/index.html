@@ -420,7 +420,8 @@
       return flatpickr(selector, {
         locale: flatpickr.l10ns && flatpickr.l10ns.ja ? flatpickr.l10ns.ja : 'default',
         dateFormat: 'Y-m-d',
-        allowInput: true,
+        clickOpens: true,
+        disableMobile: true,
         defaultDate: defaultDate || null
       });
     }
