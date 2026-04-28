@@ -76,8 +76,9 @@
     .confirm-delete { margin-top: 0.5rem; padding: 0.6rem; background: #fff5f5; border-radius: 4px; font-size: 0.82rem; color: #c62828; display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
     .confirm-delete .btn { margin-left: 0; }
     /* 画像 */
-    .image-preview-area { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
-    .image-preview-area img { height: 60px; border-radius: 3px; border: 1px solid #ddd; }
+    .image-preview-area { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+    .image-preview-area img { height: 60px; border-radius: 3px; border: 1px solid #ddd; display: block; }
+    .pending-image { position: relative; }
     .existing-images { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
     .existing-images.empty { color: #aaa; font-size: 0.78rem; padding: 0.3rem; }
     .existing-image { position: relative; }
@@ -288,14 +289,55 @@
       return dataUrl.split(',')[1];
     }
 
-    function renderFilePreview(fileInput, previewEl) {
-      previewEl.innerHTML = '';
-      Array.from(fileInput.files).forEach(function(f) {
-        var img = document.createElement('img');
-        img.src = URL.createObjectURL(f);
-        img.onload = function() { URL.revokeObjectURL(img.src); };
-        previewEl.appendChild(img);
+    // ── 画像選択の状態管理 ──
+    // 都度のfile selectは「追記」される。各サムネは×ボタンで個別削除可能。
+    // formKey: 'new' または 'edit-<index>'
+    var pendingImages = {};
+
+    function appendPendingImages(formKey, fileList) {
+      if (!pendingImages[formKey]) pendingImages[formKey] = [];
+      Array.from(fileList).forEach(function(f) {
+        pendingImages[formKey].push({ file: f, url: URL.createObjectURL(f) });
       });
+    }
+
+    function clearPendingImages(formKey) {
+      (pendingImages[formKey] || []).forEach(function(p) { URL.revokeObjectURL(p.url); });
+      pendingImages[formKey] = [];
+    }
+
+    function removePendingImage(formKey, idx) {
+      var arr = pendingImages[formKey];
+      if (!arr || !arr[idx]) return;
+      URL.revokeObjectURL(arr[idx].url);
+      arr.splice(idx, 1);
+    }
+
+    function renderPendingImages(formKey, previewEl) {
+      previewEl.innerHTML = '';
+      (pendingImages[formKey] || []).forEach(function(p, i) {
+        var div = document.createElement('div');
+        div.className = 'pending-image';
+        var img = document.createElement('img');
+        img.src = p.url;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'remove-image';
+        btn.textContent = '×';
+        btn.onclick = function() {
+          removePendingImage(formKey, i);
+          renderPendingImages(formKey, previewEl);
+        };
+        div.appendChild(img);
+        div.appendChild(btn);
+        previewEl.appendChild(div);
+      });
+    }
+
+    function countKeptExistingImages(index) {
+      var area = document.getElementById('existing-images-' + index);
+      if (!area) return 0;
+      return area.querySelectorAll('.existing-image:not(.removed)').length;
     }
 
     function toggleRemoveImage(btn) {
@@ -480,9 +522,22 @@
         '</div>';
 
       // 編集フォームのファイル入力にプレビューイベントを設定
+      // 編集セッション開始時に該当のpending状態をリセット
+      clearPendingImages('edit-' + index);
       var editFileInput = document.getElementById('edit-images-' + index);
+      var editPreviewEl = document.getElementById('edit-image-preview-' + index);
       editFileInput.addEventListener('change', function() {
-        renderFilePreview(this, document.getElementById('edit-image-preview-' + index));
+        var keptCount = countKeptExistingImages(index);
+        var pendingCount = (pendingImages['edit-' + index] || []).length;
+        var available = IMAGE_LIMIT - keptCount - pendingCount;
+        var newFiles = Array.from(this.files);
+        if (newFiles.length > available) {
+          alert('画像は合計' + IMAGE_LIMIT + '枚までです（残り' + Math.max(0, available) + '枚追加可能）');
+          newFiles = newFiles.slice(0, Math.max(0, available));
+        }
+        appendPendingImages('edit-' + index, newFiles);
+        this.value = '';
+        renderPendingImages('edit-' + index, editPreviewEl);
       });
     }
 
@@ -509,6 +564,7 @@
     }
 
     function cancelEdit(index) {
+      clearPendingImages('edit-' + index);
       document.getElementById('edit-area-' + index).innerHTML = '';
     }
 
@@ -524,18 +580,17 @@
         });
       }
 
-      // 新規画像
-      var fileInput = document.getElementById('edit-images-' + index);
-      var files = fileInput ? Array.from(fileInput.files) : [];
-      if (keptPaths.length + files.length > IMAGE_LIMIT) {
+      // 新規画像（蓄積pending）
+      var pending = pendingImages['edit-' + index] || [];
+      if (keptPaths.length + pending.length > IMAGE_LIMIT) {
         alert('画像は合計' + IMAGE_LIMIT + '枚までです');
         return;
       }
 
       try {
         var newImagesB64 = [];
-        for (var i = 0; i < files.length; i++) {
-          newImagesB64.push(await compressImageToBase64(files[i]));
+        for (var i = 0; i < pending.length; i++) {
+          newImagesB64.push(await compressImageToBase64(pending[i].file));
         }
 
         var entry = {
@@ -553,7 +608,10 @@
           new_images: newImagesB64
         };
 
-        sendAction({ action: 'edit', index: index, entry: entry }, '編集しました', function() { loadNews(); });
+        sendAction({ action: 'edit', index: index, entry: entry }, '編集しました', function() {
+          clearPendingImages('edit-' + index);
+          loadNews();
+        });
       } catch (err) {
         showMessage('error', '画像処理に失敗しました: ' + err.message);
       }
@@ -575,16 +633,17 @@
     }
 
     // ── 新規投稿 ──
-    // 画像プレビュー
+    // 画像プレビュー: 都度の選択を追記し、各サムネに×ボタンを付ける
     document.getElementById('images').addEventListener('change', function() {
-      var files = Array.from(this.files);
-      if (files.length > IMAGE_LIMIT) {
-        alert('画像は' + IMAGE_LIMIT + '枚までです');
-        this.value = '';
-        document.getElementById('image-preview-area').innerHTML = '';
-        return;
+      var available = IMAGE_LIMIT - (pendingImages['new'] || []).length;
+      var newFiles = Array.from(this.files);
+      if (newFiles.length > available) {
+        alert('画像は合計' + IMAGE_LIMIT + '枚までです（残り' + available + '枚追加可能）');
+        newFiles = newFiles.slice(0, Math.max(0, available));
       }
-      renderFilePreview(this, document.getElementById('image-preview-area'));
+      appendPendingImages('new', newFiles);
+      this.value = ''; // 同じファイルでも続けて選択できるようにリセット
+      renderPendingImages('new', document.getElementById('image-preview-area'));
     });
 
     document.getElementById('news-form').addEventListener('submit', async function(e) {
@@ -611,13 +670,12 @@
         }
 
         // 画像を圧縮
-        var fileInput = document.getElementById('images');
-        var files = Array.from(fileInput.files);
+        var pending = pendingImages['new'] || [];
         var newImagesB64 = [];
-        if (files.length > 0) {
+        if (pending.length > 0) {
           btn.textContent = '画像を圧縮中...';
-          for (var i = 0; i < files.length; i++) {
-            newImagesB64.push(await compressImageToBase64(files[i]));
+          for (var i = 0; i < pending.length; i++) {
+            newImagesB64.push(await compressImageToBase64(pending[i].file));
           }
           btn.textContent = '送信中...';
         }
@@ -640,6 +698,7 @@
 
         sendAction(payload, '投稿しました', function() {
           document.getElementById('news-form').reset();
+          clearPendingImages('new');
           document.getElementById('image-preview-area').innerHTML = '';
           loadNews();
         }, function() {
