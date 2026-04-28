@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>News Admin - Materials Modeling Group</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/ja.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Noto Sans JP', 'Inter', sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
@@ -79,6 +82,20 @@
     .image-preview-area { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
     .image-preview-area img { height: 60px; border-radius: 3px; border: 1px solid #ddd; display: block; }
     .pending-image { position: relative; }
+    /* 日付ピッカー（flatpickr）を大きめに */
+    .flatpickr-calendar { font-size: 1rem; box-shadow: 0 4px 24px rgba(0,0,0,0.14); border-radius: 6px; }
+    .flatpickr-calendar.open { width: 340px; }
+    .flatpickr-days { width: 340px; }
+    .dayContainer { width: 340px; min-width: 340px; max-width: 340px; }
+    .flatpickr-day { height: 44px; line-height: 44px; max-width: 44px; font-size: 0.95rem; border-radius: 4px; }
+    .flatpickr-day.selected, .flatpickr-day.selected:hover { background: #c83c2d; border-color: #c83c2d; }
+    .flatpickr-day.today { border-color: #c83c2d; }
+    .flatpickr-weekdays { padding: 0 6px; }
+    .flatpickr-weekday { font-size: 0.85rem; height: 32px; line-height: 32px; color: #888; }
+    .flatpickr-current-month { font-size: 1.05rem; padding: 0.6rem 0; }
+    .flatpickr-monthDropdown-months, .numInputWrapper { font-size: 1rem; }
+    /* 日付入力欄を全体クリック可能なスタイルに */
+    input.flatpickr-input { cursor: pointer; background: #fff; }
     .existing-images { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
     .existing-images.empty { color: #aaa; font-size: 0.78rem; padding: 0.3rem; }
     .existing-image { position: relative; }
@@ -395,6 +412,21 @@
     var CATEGORY_EN_TO_JA = {};
     Object.keys(CATEGORY_EN).forEach(function(k) { CATEGORY_EN_TO_JA[CATEGORY_EN[k]] = k; });
 
+    // ── 日付ピッカー（flatpickr） ──
+    // ライブラリが読み込まれていれば大きめのカレンダーに置き換える。
+    // ネットワーク事情で読み込めなかった場合は <input type="date"> のままフォールバックする。
+    function initDatePicker(selector, defaultDate) {
+      if (typeof flatpickr === 'undefined') return null;
+      return flatpickr(selector, {
+        locale: flatpickr.l10ns && flatpickr.l10ns.ja ? flatpickr.l10ns.ja : 'default',
+        dateFormat: 'Y-m-d',
+        allowInput: true,
+        defaultDate: defaultDate || null
+      });
+    }
+    // 新規投稿の日付入力に適用（投稿成功後のリセット用に参照を保持）
+    var newPostDatePicker = initDatePicker('#date');
+
     var newsList = [];
 
     // ── 一覧読み込み ──
@@ -520,6 +552,9 @@
             '<button class="btn btn-save" onclick="saveEdit(' + index + ')">保存</button>' +
           '</div>' +
         '</div>';
+
+      // 編集フォームの日付入力に大きめカレンダーを適用
+      initDatePicker('#edit-date-' + index, item.date);
 
       // 編集フォームのファイル入力にプレビューイベントを設定
       // 編集セッション開始時に該当のpending状態をリセット
@@ -698,6 +733,7 @@
 
         sendAction(payload, '投稿しました', function() {
           document.getElementById('news-form').reset();
+          if (newPostDatePicker) newPostDatePicker.clear();
           clearPendingImages('new');
           document.getElementById('image-preview-area').innerHTML = '';
           loadNews();
