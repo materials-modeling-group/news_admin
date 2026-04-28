@@ -77,87 +77,130 @@ function doPost(e) {
   }
 }
 
-// ── GitHub操作の共通関数 ──
-function getGitHubFile() {
+// ── GitHub API 共通呼び出し ──
+function ghApi(method, path, payload) {
   var props = PropertiesService.getScriptProperties();
   var token = props.getProperty("GITHUB_TOKEN");
   var repo = props.getProperty("GITHUB_REPO");
-  var path = "data/news.json";
-  var url = "https://api.github.com/repos/" + repo + "/contents/" + path + "?ref=main";
-  var resp = UrlFetchApp.fetch(url, {
-    headers: { Authorization: "Bearer " + token, Accept: "application/vnd.github.v3+json" }
-  });
-  var info = JSON.parse(resp.getContentText());
-  var content = Utilities.newBlob(Utilities.base64Decode(info.content)).getDataAsString();
-  return { list: JSON.parse(content), sha: info.sha };
-}
-
-function commitNewsList(newsList, sha, message) {
-  var props = PropertiesService.getScriptProperties();
-  var token = props.getProperty("GITHUB_TOKEN");
-  var repo = props.getProperty("GITHUB_REPO");
-  var path = "data/news.json";
-  var content = JSON.stringify(newsList, null, 2) + "\n";
-  var encoded = Utilities.base64Encode(Utilities.newBlob(content).getBytes());
-  var url = "https://api.github.com/repos/" + repo + "/contents/" + path;
-  var resp = UrlFetchApp.fetch(url, {
-    method: "put",
+  var url = "https://api.github.com/repos/" + repo + "/" + path;
+  var options = {
+    method: method,
     headers: { Authorization: "Bearer " + token, Accept: "application/vnd.github.v3+json" },
-    contentType: "application/json",
-    payload: JSON.stringify({ message: message, content: encoded, sha: sha, branch: "main" })
-  });
-  return JSON.parse(resp.getContentText()).commit.sha;
+    muteHttpExceptions: true
+  };
+  if (payload !== undefined) {
+    options.contentType = "application/json";
+    options.payload = JSON.stringify(payload);
+  }
+  var resp = UrlFetchApp.fetch(url, options);
+  var code = resp.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error("GitHub API " + method + " " + path + " " + code + ": " + resp.getContentText());
+  }
+  return JSON.parse(resp.getContentText());
 }
 
 // ── 一覧取得 ──
 function getNewsFromGitHub() {
-  return getGitHubFile().list;
+  var info = ghApi("GET", "contents/data/news.json?ref=main");
+  var content = Utilities.newBlob(Utilities.base64Decode(info.content)).getDataAsString();
+  return JSON.parse(content);
+}
+
+// ── ニュース更新と画像追加・削除を Git Data API で1コミットにまとめる ──
+// addedImages:        [{ path, base64 }]
+// deletedImagePaths:  [path, ...]
+function commitChanges(newsList, addedImages, deletedImagePaths, message) {
+  // 1. 現在の main の commit と tree を取得
+  var ref = ghApi("GET", "git/ref/heads/main");
+  var parentSha = ref.object.sha;
+  var parentCommit = ghApi("GET", "git/commits/" + parentSha);
+  var baseTree = parentCommit.tree.sha;
+
+  // 2. news.json の blob 作成
+  var newsContent = JSON.stringify(newsList, null, 2) + "\n";
+  var newsBlob = ghApi("POST", "git/blobs", { content: newsContent, encoding: "utf-8" });
+
+  // 3. 新規画像の blob 作成
+  var imageBlobs = (addedImages || []).map(function (img) {
+    var b = ghApi("POST", "git/blobs", { content: img.base64, encoding: "base64" });
+    return { path: img.path, sha: b.sha };
+  });
+
+  // 4. tree を組み立て
+  var treeItems = [
+    { path: "data/news.json", mode: "100644", type: "blob", sha: newsBlob.sha }
+  ];
+  imageBlobs.forEach(function (b) {
+    treeItems.push({ path: b.path, mode: "100644", type: "blob", sha: b.sha });
+  });
+  (deletedImagePaths || []).forEach(function (p) {
+    treeItems.push({ path: p, mode: "100644", type: "blob", sha: null });
+  });
+  var newTree = ghApi("POST", "git/trees", { base_tree: baseTree, tree: treeItems });
+
+  // 5. commit を作成して main を更新
+  var commit = ghApi("POST", "git/commits", { message: message, tree: newTree.sha, parents: [parentSha] });
+  ghApi("PATCH", "git/refs/heads/main", { sha: commit.sha });
+  return commit.sha;
+}
+
+// 新規画像のbase64配列から { path, base64 } 配列を生成（パスは date + 8桁UUID）
+function prepareNewImages(date, base64Array) {
+  return (base64Array || []).map(function (b64) {
+    var uuid = Utilities.getUuid().substring(0, 8);
+    var path = "images/news/" + (date || "undated") + "-" + uuid + ".jpg";
+    return { path: path, base64: b64 };
+  });
+}
+
+// ニュースエントリの正規化
+function normalizeEntry(data, finalImages) {
+  return {
+    date: data.date || "",
+    category: data.category || "",
+    category_en: data.category_en || "",
+    title: data.title || "",
+    title_en: data.title_en || "",
+    url: data.url || "",
+    paper_title: data.paper_title || "",
+    doi: data.doi || "",
+    body: (data.body || "").replace(/\n/g, "<br>"),
+    body_en: (data.body_en || "").replace(/\n/g, "<br>"),
+    images: finalImages || []
+  };
 }
 
 // ── 追加 ──
 function addNews(newsItem) {
-  var file = getGitHubFile();
-  var entry = {
-    date: newsItem.date || "",
-    category: newsItem.category || "",
-    category_en: newsItem.category_en || "",
-    title: newsItem.title || "",
-    title_en: newsItem.title_en || "",
-    url: newsItem.url || "",
-    paper_title: newsItem.paper_title || "",
-    doi: newsItem.doi || "",
-    body: (newsItem.body || "").replace(/\n/g, "<br>"),
-    body_en: (newsItem.body_en || "").replace(/\n/g, "<br>")
-  };
-  file.list.unshift(entry);
-  file.list.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
-  return commitNewsList(file.list, file.sha, "ニュースを追加: " + (newsItem.title || "no title"));
+  var list = getNewsFromGitHub();
+  var newImages = prepareNewImages(newsItem.date, newsItem.new_images);
+  var imagePaths = (newsItem.images || []).concat(newImages.map(function (i) { return i.path; }));
+  var entry = normalizeEntry(newsItem, imagePaths);
+  list.unshift(entry);
+  list.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
+  return commitChanges(list, newImages, [], "ニュースを追加: " + (entry.title || "no title"));
 }
 
 // ── 編集 ──
 function editNews(index, updatedEntry) {
-  var file = getGitHubFile();
-  if (index < 0 || index >= file.list.length) throw new Error("Invalid index: " + index);
-  file.list[index] = {
-    date: updatedEntry.date || "",
-    category: updatedEntry.category || "",
-    category_en: updatedEntry.category_en || "",
-    title: updatedEntry.title || "",
-    title_en: updatedEntry.title_en || "",
-    url: updatedEntry.url || "",
-    paper_title: updatedEntry.paper_title || "",
-    doi: updatedEntry.doi || "",
-    body: (updatedEntry.body || "").replace(/\n/g, "<br>"),
-    body_en: (updatedEntry.body_en || "").replace(/\n/g, "<br>")
-  };
-  file.list.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
-  return commitNewsList(file.list, file.sha, "ニュースを編集: " + (updatedEntry.title || "no title"));
+  var list = getNewsFromGitHub();
+  if (index < 0 || index >= list.length) throw new Error("Invalid index: " + index);
+  var oldImages = list[index].images || [];
+  var keptImages = updatedEntry.images || [];
+  var deletedImages = oldImages.filter(function (p) { return keptImages.indexOf(p) < 0; });
+  var newImages = prepareNewImages(updatedEntry.date, updatedEntry.new_images);
+  var finalImages = keptImages.concat(newImages.map(function (i) { return i.path; }));
+  list[index] = normalizeEntry(updatedEntry, finalImages);
+  list.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
+  return commitChanges(list, newImages, deletedImages, "ニュースを編集: " + (updatedEntry.title || "no title"));
 }
 
 // ── 削除 ──
 function deleteNews(index) {
-  var file = getGitHubFile();
-  if (index < 0 || index >= file.list.length) throw new Error("Invalid index: " + index);
-  var removed = file.list.splice(index, 1)[0];
-  return commitNewsList(file.list, file.sha, "ニュースを削除: " + (removed.title || "no title"));
+  var list = getNewsFromGitHub();
+  if (index < 0 || index >= list.length) throw new Error("Invalid index: " + index);
+  var removed = list.splice(index, 1)[0];
+  var deletedImages = removed.images || [];
+  return commitChanges(list, [], deletedImages, "ニュースを削除: " + (removed.title || "no title"));
 }
