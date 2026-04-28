@@ -75,6 +75,25 @@
     .edit-actions { display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap; }
     .confirm-delete { margin-top: 0.5rem; padding: 0.6rem; background: #fff5f5; border-radius: 4px; font-size: 0.82rem; color: #c62828; display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
     .confirm-delete .btn { margin-left: 0; }
+    /* 画像 */
+    .image-preview-area { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+    .image-preview-area img { height: 60px; border-radius: 3px; border: 1px solid #ddd; }
+    .existing-images { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+    .existing-images.empty { color: #aaa; font-size: 0.78rem; padding: 0.3rem; }
+    .existing-image { position: relative; }
+    .existing-image img { height: 60px; border-radius: 3px; border: 1px solid #ddd; display: block; }
+    .existing-image.removed img { opacity: 0.25; filter: grayscale(1); }
+    .existing-image.removed::after {
+      content: '削除予定'; position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%); background: rgba(200,60,45,0.9); color: #fff;
+      padding: 2px 6px; border-radius: 2px; font-size: 0.7rem; white-space: nowrap;
+    }
+    .remove-image {
+      position: absolute; top: -6px; right: -6px; width: 22px; height: 22px;
+      border: none; border-radius: 50%; background: #c83c2d; color: #fff;
+      font-size: 0.95rem; line-height: 1; cursor: pointer; padding: 0;
+    }
+    .remove-image:hover { background: #a02e22; }
     /* ログイン画面 */
     .login-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -206,6 +225,11 @@
               <label>本文（英語）<span class="hint">Links: &lt;a href="URL" target="_blank"&gt;text&lt;/a&gt;</span></label>
               <textarea id="body_en"></textarea>
             </div>
+            <div class="field">
+              <label>画像（最大5枚）<span class="hint">JPEG/PNG。長辺1920px・JPEG品質85%に自動圧縮されます</span></label>
+              <input type="file" id="images" multiple accept="image/*">
+              <div id="image-preview-area" class="image-preview-area"></div>
+            </div>
             <button type="submit" class="btn btn-primary" id="submit-btn">投稿する</button>
           </form>
           <div class="message" id="message"></div>
@@ -234,6 +258,48 @@
       sessionStorage.removeItem('admin_auth_hash');
       document.getElementById('admin-content').classList.add('locked');
       document.getElementById('login-overlay').classList.remove('hidden');
+    }
+
+    var IMAGE_MAX_DIM = 1920;
+    var IMAGE_JPEG_QUALITY = 0.85;
+    var IMAGE_LIMIT = 5;
+    var IMAGE_PUBLIC_BASE = 'https://materials-modeling-group.github.io/homepage/';
+
+    // ── 画像処理 ──
+    function loadImageFromFile(file) {
+      return new Promise(function(resolve, reject) {
+        var url = URL.createObjectURL(file);
+        var img = new Image();
+        img.onload = function() { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = function(e) { URL.revokeObjectURL(url); reject(e); };
+        img.src = url;
+      });
+    }
+
+    // 画像をcanvasで縮小・JPEG圧縮し、base64文字列（プレフィックスなし）を返す
+    async function compressImageToBase64(file) {
+      var img = await loadImageFromFile(file);
+      var scale = Math.min(1, IMAGE_MAX_DIM / Math.max(img.width, img.height));
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      var dataUrl = canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY);
+      return dataUrl.split(',')[1];
+    }
+
+    function renderFilePreview(fileInput, previewEl) {
+      previewEl.innerHTML = '';
+      Array.from(fileInput.files).forEach(function(f) {
+        var img = document.createElement('img');
+        img.src = URL.createObjectURL(f);
+        img.onload = function() { URL.revokeObjectURL(img.src); };
+        previewEl.appendChild(img);
+      });
+    }
+
+    function toggleRemoveImage(btn) {
+      btn.parentElement.classList.toggle('removed');
     }
 
     // 渡したハッシュでGASに照会して認証可否を判定する
@@ -402,11 +468,35 @@
           '<div class="field"><label>DOI</label><input type="text" id="edit-doi-' + index + '" value="' + esc(item.doi) + '" placeholder="10.1016/j.matdes.2026.115584"></div>' +
           '<div class="field"><label>本文（日本語）</label><textarea id="edit-body-ja-' + index + '">' + esc(bodyJa) + '</textarea></div>' +
           '<div class="field"><label>本文（英語）</label><textarea id="edit-body-en-' + index + '">' + esc(bodyEn) + '</textarea></div>' +
+          '<div class="field"><label>既存の画像</label>' + buildExistingImagesHtml(index, item.images) + '</div>' +
+          '<div class="field"><label>追加する画像（合計' + IMAGE_LIMIT + '枚まで）</label>' +
+            '<input type="file" id="edit-images-' + index + '" multiple accept="image/*">' +
+            '<div id="edit-image-preview-' + index + '" class="image-preview-area"></div>' +
+          '</div>' +
           '<div class="edit-actions">' +
             '<button class="btn btn-cancel" onclick="cancelEdit(' + index + ')">キャンセル</button>' +
             '<button class="btn btn-save" onclick="saveEdit(' + index + ')">保存</button>' +
           '</div>' +
         '</div>';
+
+      // 編集フォームのファイル入力にプレビューイベントを設定
+      var editFileInput = document.getElementById('edit-images-' + index);
+      editFileInput.addEventListener('change', function() {
+        renderFilePreview(this, document.getElementById('edit-image-preview-' + index));
+      });
+    }
+
+    function buildExistingImagesHtml(index, images) {
+      images = images || [];
+      if (!images.length) return '<div class="existing-images empty" id="existing-images-' + index + '">なし</div>';
+      return '<div class="existing-images" id="existing-images-' + index + '">' +
+        images.map(function(p) {
+          return '<div class="existing-image" data-path="' + esc(p) + '">' +
+            '<img src="' + esc(IMAGE_PUBLIC_BASE + p) + '" alt="">' +
+            '<button type="button" class="remove-image" onclick="toggleRemoveImage(this)">×</button>' +
+          '</div>';
+        }).join('') +
+      '</div>';
     }
 
     function buildCategorySelect(id, current) {
@@ -422,22 +512,51 @@
       document.getElementById('edit-area-' + index).innerHTML = '';
     }
 
-    function saveEdit(index) {
+    async function saveEdit(index) {
       var cat = document.getElementById('edit-cat-' + index).value;
-      var entry = {
-        date: document.getElementById('edit-date-' + index).value,
-        category: cat,
-        category_en: CATEGORY_EN[cat] || cat,
-        title: document.getElementById('edit-title-ja-' + index).value,
-        title_en: document.getElementById('edit-title-en-' + index).value,
-        url: document.getElementById('edit-url-' + index).value.trim(),
-        paper_title: document.getElementById('edit-paper-title-' + index).value.trim(),
-        doi: document.getElementById('edit-doi-' + index).value.trim(),
-        body: document.getElementById('edit-body-ja-' + index).value,
-        body_en: document.getElementById('edit-body-en-' + index).value
-      };
 
-      sendAction({ action: 'edit', index: index, entry: entry }, '編集しました', function() { loadNews(); });
+      // 残す既存画像のパスを収集（削除フラグが立っていないもの）
+      var existingArea = document.getElementById('existing-images-' + index);
+      var keptPaths = [];
+      if (existingArea) {
+        Array.from(existingArea.querySelectorAll('.existing-image:not(.removed)')).forEach(function(el) {
+          keptPaths.push(el.dataset.path);
+        });
+      }
+
+      // 新規画像
+      var fileInput = document.getElementById('edit-images-' + index);
+      var files = fileInput ? Array.from(fileInput.files) : [];
+      if (keptPaths.length + files.length > IMAGE_LIMIT) {
+        alert('画像は合計' + IMAGE_LIMIT + '枚までです');
+        return;
+      }
+
+      try {
+        var newImagesB64 = [];
+        for (var i = 0; i < files.length; i++) {
+          newImagesB64.push(await compressImageToBase64(files[i]));
+        }
+
+        var entry = {
+          date: document.getElementById('edit-date-' + index).value,
+          category: cat,
+          category_en: CATEGORY_EN[cat] || cat,
+          title: document.getElementById('edit-title-ja-' + index).value,
+          title_en: document.getElementById('edit-title-en-' + index).value,
+          url: document.getElementById('edit-url-' + index).value.trim(),
+          paper_title: document.getElementById('edit-paper-title-' + index).value.trim(),
+          doi: document.getElementById('edit-doi-' + index).value.trim(),
+          body: document.getElementById('edit-body-ja-' + index).value,
+          body_en: document.getElementById('edit-body-en-' + index).value,
+          images: keptPaths,
+          new_images: newImagesB64
+        };
+
+        sendAction({ action: 'edit', index: index, entry: entry }, '編集しました', function() { loadNews(); });
+      } catch (err) {
+        showMessage('error', '画像処理に失敗しました: ' + err.message);
+      }
     }
 
     // ── 削除 ──
@@ -456,48 +575,80 @@
     }
 
     // ── 新規投稿 ──
-    document.getElementById('news-form').addEventListener('submit', function(e) {
+    // 画像プレビュー
+    document.getElementById('images').addEventListener('change', function() {
+      var files = Array.from(this.files);
+      if (files.length > IMAGE_LIMIT) {
+        alert('画像は' + IMAGE_LIMIT + '枚までです');
+        this.value = '';
+        document.getElementById('image-preview-area').innerHTML = '';
+        return;
+      }
+      renderFilePreview(this, document.getElementById('image-preview-area'));
+    });
+
+    document.getElementById('news-form').addEventListener('submit', async function(e) {
       e.preventDefault();
       var btn = document.getElementById('submit-btn');
       btn.disabled = true; btn.textContent = '送信中...';
 
-      var cat = document.getElementById('category').value;
-      var dateVal = document.getElementById('date').value;
-      var eventName = document.getElementById('event_name').value.trim();
-      var presentersVal = document.getElementById('presenters').value.trim();
-      var manualBody = document.getElementById('body_ja').value;
+      try {
+        var cat = document.getElementById('category').value;
+        var dateVal = document.getElementById('date').value;
+        var eventName = document.getElementById('event_name').value.trim();
+        var presentersVal = document.getElementById('presenters').value.trim();
+        var manualBody = document.getElementById('body_ja').value;
 
-      // 学会名が入力されていれば招待講演の本文を自動生成
-      var bodyJa = manualBody;
-      if (eventName) {
-        var lines = [];
-        lines.push('学会名：' + eventName);
-        if (dateVal) lines.push('日時：' + formatDateJa(dateVal));
-        if (presentersVal) lines.push('発表者：' + presentersVal);
-        if (manualBody) lines.push(manualBody);
-        bodyJa = lines.join('\n');
-      }
+        // 学会名が入力されていれば招待講演の本文を自動生成
+        var bodyJa = manualBody;
+        if (eventName) {
+          var lines = [];
+          lines.push('学会名：' + eventName);
+          if (dateVal) lines.push('日時：' + formatDateJa(dateVal));
+          if (presentersVal) lines.push('発表者：' + presentersVal);
+          if (manualBody) lines.push(manualBody);
+          bodyJa = lines.join('\n');
+        }
 
-      var payload = {
-        action: 'add',
-        date: dateVal,
-        category: cat,
-        category_en: CATEGORY_EN[cat] || cat,
-        title: document.getElementById('title_ja').value,
-        title_en: document.getElementById('title_en').value,
-        url: document.getElementById('url').value.trim(),
-        paper_title: document.getElementById('paper_title').value.trim(),
-        doi: document.getElementById('doi').value.trim(),
-        body: bodyJa,
-        body_en: document.getElementById('body_en').value
-      };
+        // 画像を圧縮
+        var fileInput = document.getElementById('images');
+        var files = Array.from(fileInput.files);
+        var newImagesB64 = [];
+        if (files.length > 0) {
+          btn.textContent = '画像を圧縮中...';
+          for (var i = 0; i < files.length; i++) {
+            newImagesB64.push(await compressImageToBase64(files[i]));
+          }
+          btn.textContent = '送信中...';
+        }
 
-      sendAction(payload, '投稿しました', function() {
-        document.getElementById('news-form').reset();
-        loadNews();
-      }, function() {
+        var payload = {
+          action: 'add',
+          date: dateVal,
+          category: cat,
+          category_en: CATEGORY_EN[cat] || cat,
+          title: document.getElementById('title_ja').value,
+          title_en: document.getElementById('title_en').value,
+          url: document.getElementById('url').value.trim(),
+          paper_title: document.getElementById('paper_title').value.trim(),
+          doi: document.getElementById('doi').value.trim(),
+          body: bodyJa,
+          body_en: document.getElementById('body_en').value,
+          images: [],
+          new_images: newImagesB64
+        };
+
+        sendAction(payload, '投稿しました', function() {
+          document.getElementById('news-form').reset();
+          document.getElementById('image-preview-area').innerHTML = '';
+          loadNews();
+        }, function() {
+          btn.disabled = false; btn.textContent = '投稿する';
+        });
+      } catch (err) {
+        showMessage('error', '画像処理に失敗しました: ' + err.message);
         btn.disabled = false; btn.textContent = '投稿する';
-      });
+      }
     });
 
     // ── GASへの送信 ──
