@@ -76,6 +76,9 @@
     .edit-form input, .edit-form select, .edit-form textarea { font-size: 0.82rem; padding: 0.4rem 0.6rem; }
     .edit-form textarea { min-height: 60px; }
     .edit-actions { display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap; }
+    .form-actions { display: flex; gap: 0.5rem; align-items: center; }
+    .form-actions #submit-btn { flex: 1; width: auto; }
+    .form-actions #cancel-edit-btn { flex: 0 0 auto; }
     .confirm-delete { margin-top: 0.5rem; padding: 0.6rem; background: #fff5f5; border-radius: 4px; font-size: 0.82rem; color: #c62828; display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
     .confirm-delete .btn { margin-left: 0; }
     /* 画像 */
@@ -190,7 +193,7 @@
       <!-- 右: 新規投稿 -->
       <div class="col-form">
         <div class="card">
-          <h2>新規投稿</h2>
+          <h2 id="form-heading">新規投稿</h2>
           <form id="news-form">
             <div class="field">
               <label>日付</label>
@@ -227,11 +230,11 @@
               <label>DOI<span class="hint">論文DOI（例: 10.1016/j.matdes.2026.115584）。論文以外は空欄</span></label>
               <input type="text" id="doi" placeholder="10.1016/j.matdes.2026.115584">
             </div>
-            <div class="field">
+            <div class="field" id="event-name-field">
               <label>学会名<span class="hint">招待講演の場合に入力。学会名・日時・発表者から本文が自動構成されます（本文欄が空の場合）</span></label>
               <input type="text" id="event_name" placeholder="XVIII International Conference on Computational Plasticity">
             </div>
-            <div class="field">
+            <div class="field" id="presenters-field">
               <label>発表者<span class="hint">招待講演の場合に入力（例: Ikumu Watanabe）</span></label>
               <input type="text" id="presenters" placeholder="Ikumu Watanabe">
             </div>
@@ -243,12 +246,19 @@
               <label>本文（英語）<span class="hint">Links: &lt;a href="URL" target="_blank"&gt;text&lt;/a&gt;</span></label>
               <textarea id="body_en"></textarea>
             </div>
+            <div class="field" id="existing-images-field" style="display:none">
+              <label>既存の画像</label>
+              <div id="existing-images-area"></div>
+            </div>
             <div class="field">
-              <label>画像（最大5枚）<span class="hint">JPEG/PNG。長辺1920px・JPEG品質85%に自動圧縮されます</span></label>
+              <label id="images-label">画像（最大5枚）<span class="hint">JPEG/PNG。長辺1920px・JPEG品質85%に自動圧縮されます</span></label>
               <input type="file" id="images" multiple accept="image/*">
               <div id="image-preview-area" class="image-preview-area"></div>
             </div>
-            <button type="submit" class="btn btn-primary" id="submit-btn">投稿する</button>
+            <div class="form-actions" id="form-actions">
+              <button type="button" class="btn btn-cancel" id="cancel-edit-btn" style="display:none">編集をキャンセル</button>
+              <button type="submit" class="btn btn-primary" id="submit-btn">投稿する</button>
+            </div>
           </form>
           <div class="message" id="message"></div>
         </div>
@@ -351,12 +361,6 @@
       });
     }
 
-    function countKeptExistingImages(index) {
-      var area = document.getElementById('existing-images-' + index);
-      if (!area) return 0;
-      return area.querySelectorAll('.existing-image:not(.removed)').length;
-    }
-
     function toggleRemoveImage(btn) {
       btn.parentElement.classList.toggle('removed');
     }
@@ -429,6 +433,7 @@
     var newPostDatePicker = initDatePicker('#date');
 
     var newsList = [];
+    var editingIndex = null;
 
     // ── 一覧読み込み ──
     function loadNews() {
@@ -527,134 +532,102 @@
     }
 
     // ── 編集 ──
+    // 編集ボタン押下時、右側のフォームに内容を反映して編集モードに入る
     function startEdit(index) {
-      var item = newsList[index];
-      var area = document.getElementById('edit-area-' + index);
-      var bodyJa = (item.body || '').replace(/<br>/g, '\n');
-      var bodyEn = (item.body_en || '').replace(/<br>/g, '\n');
-      area.innerHTML =
-        '<div class="edit-form">' +
-          '<div class="field"><label>日付</label><input type="date" id="edit-date-' + index + '" value="' + esc(item.date) + '"></div>' +
-          '<div class="field"><label>カテゴリ</label>' + buildCategorySelect('edit-cat-' + index, item.category) + '</div>' +
-          '<div class="field"><label>タイトル（日本語）</label><input type="text" id="edit-title-ja-' + index + '" value="' + esc(item.title) + '"></div>' +
-          '<div class="field"><label>タイトル（英語）</label><input type="text" id="edit-title-en-' + index + '" value="' + esc(item.title_en) + '"></div>' +
-          '<div class="field"><label>関連URL</label><input type="text" id="edit-url-' + index + '" value="' + esc(item.url) + '" placeholder="https://www.nims.go.jp/press/..."></div>' +
-          '<div class="field"><label>論文/講演タイトル</label><input type="text" id="edit-paper-title-' + index + '" value="' + esc(item.paper_title) + '" placeholder="Modular metamaterials with deep learning..."></div>' +
-          '<div class="field"><label>DOI</label><input type="text" id="edit-doi-' + index + '" value="' + esc(item.doi) + '" placeholder="10.1016/j.matdes.2026.115584"></div>' +
-          '<div class="field"><label>本文（日本語）</label><textarea id="edit-body-ja-' + index + '">' + esc(bodyJa) + '</textarea></div>' +
-          '<div class="field"><label>本文（英語）</label><textarea id="edit-body-en-' + index + '">' + esc(bodyEn) + '</textarea></div>' +
-          '<div class="field"><label>既存の画像</label>' + buildExistingImagesHtml(index, item.images) + '</div>' +
-          '<div class="field"><label>追加する画像（合計' + IMAGE_LIMIT + '枚まで）</label>' +
-            '<input type="file" id="edit-images-' + index + '" multiple accept="image/*">' +
-            '<div id="edit-image-preview-' + index + '" class="image-preview-area"></div>' +
-          '</div>' +
-          '<div class="edit-actions">' +
-            '<button class="btn btn-cancel" onclick="cancelEdit(' + index + ')">キャンセル</button>' +
-            '<button class="btn btn-save" onclick="saveEdit(' + index + ')">保存</button>' +
-          '</div>' +
-        '</div>';
-
-      // 編集フォームの日付入力に大きめカレンダーを適用
-      initDatePicker('#edit-date-' + index, item.date);
-
-      // 編集フォームのファイル入力にプレビューイベントを設定
-      // 編集セッション開始時に該当のpending状態をリセット
-      clearPendingImages('edit-' + index);
-      var editFileInput = document.getElementById('edit-images-' + index);
-      var editPreviewEl = document.getElementById('edit-image-preview-' + index);
-      editFileInput.addEventListener('change', function() {
-        var keptCount = countKeptExistingImages(index);
-        var pendingCount = (pendingImages['edit-' + index] || []).length;
-        var available = IMAGE_LIMIT - keptCount - pendingCount;
-        var newFiles = Array.from(this.files);
-        if (newFiles.length > available) {
-          alert('画像は合計' + IMAGE_LIMIT + '枚までです（残り' + Math.max(0, available) + '枚追加可能）');
-          newFiles = newFiles.slice(0, Math.max(0, available));
-        }
-        appendPendingImages('edit-' + index, newFiles);
-        this.value = '';
-        renderPendingImages('edit-' + index, editPreviewEl);
-      });
+      enterEditMode(index);
     }
 
-    function buildExistingImagesHtml(index, images) {
-      images = images || [];
-      if (!images.length) return '<div class="existing-images empty" id="existing-images-' + index + '">なし</div>';
-      return '<div class="existing-images" id="existing-images-' + index + '">' +
-        images.map(function(p) {
+    function enterEditMode(index) {
+      var item = newsList[index];
+      editingIndex = index;
+
+      // フォームに値を反映
+      var dateVal = item.date || '';
+      if (newPostDatePicker) {
+        newPostDatePicker.setDate(dateVal, false);
+      } else {
+        document.getElementById('date').value = dateVal;
+      }
+      document.getElementById('category').value = item.category || '';
+      document.getElementById('title_ja').value = item.title || '';
+      document.getElementById('title_en').value = item.title_en || '';
+      document.getElementById('url').value = item.url || '';
+      document.getElementById('paper_title').value = item.paper_title || '';
+      document.getElementById('doi').value = item.doi || '';
+      document.getElementById('event_name').value = '';
+      document.getElementById('presenters').value = '';
+      document.getElementById('body_ja').value = (item.body || '').replace(/<br>/g, '\n');
+      document.getElementById('body_en').value = (item.body_en || '').replace(/<br>/g, '\n');
+
+      // 既存画像を表示
+      var existingArea = document.getElementById('existing-images-area');
+      var imgs = item.images || [];
+      if (imgs.length) {
+        existingArea.className = 'existing-images';
+        existingArea.innerHTML = imgs.map(function(p) {
           return '<div class="existing-image" data-path="' + esc(p) + '">' +
             '<img src="' + esc(IMAGE_PUBLIC_BASE + p) + '" alt="">' +
             '<button type="button" class="remove-image" onclick="toggleRemoveImage(this)">×</button>' +
           '</div>';
-        }).join('') +
-      '</div>';
+        }).join('');
+      } else {
+        existingArea.className = 'existing-images empty';
+        existingArea.innerHTML = 'なし';
+      }
+      document.getElementById('existing-images-field').style.display = '';
+
+      // 新規アップロード予定はクリア
+      clearPendingImages('new');
+      document.getElementById('image-preview-area').innerHTML = '';
+
+      // UIテキスト切り替え
+      document.getElementById('form-heading').textContent = '投稿を編集';
+      document.getElementById('submit-btn').textContent = '保存する';
+      document.getElementById('cancel-edit-btn').style.display = 'inline-block';
+      document.getElementById('images-label').innerHTML = '追加する画像<span class="hint">既存と合わせて合計' + IMAGE_LIMIT + '枚まで</span>';
+
+      // 編集モードでは招待講演用の自動本文生成欄を非表示にする
+      document.getElementById('event-name-field').style.display = 'none';
+      document.getElementById('presenters-field').style.display = 'none';
+
+      // メッセージ領域をクリアし、フォーム先頭にスクロール
+      var msg = document.getElementById('message');
+      msg.className = 'message';
+      msg.textContent = '';
+      document.getElementById('form-heading').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    function buildCategorySelect(id, current) {
-      var opts = ['お知らせ', 'プレスリリース', '受賞', 'メディア', 'イベント'];
-      var html = '<select id="' + id + '">';
-      opts.forEach(function(o) {
-        html += '<option value="' + o + '"' + (o === current ? ' selected' : '') + '>' + o + ' / ' + CATEGORY_EN[o] + '</option>';
-      });
-      return html + '</select>';
+    function exitEditMode() {
+      editingIndex = null;
+      document.getElementById('news-form').reset();
+      if (newPostDatePicker) newPostDatePicker.clear();
+      clearPendingImages('new');
+      document.getElementById('image-preview-area').innerHTML = '';
+      var existingArea = document.getElementById('existing-images-area');
+      existingArea.className = '';
+      existingArea.innerHTML = '';
+      document.getElementById('existing-images-field').style.display = 'none';
+      document.getElementById('form-heading').textContent = '新規投稿';
+      document.getElementById('submit-btn').textContent = '投稿する';
+      document.getElementById('cancel-edit-btn').style.display = 'none';
+      document.getElementById('images-label').innerHTML = '画像（最大' + IMAGE_LIMIT + '枚）<span class="hint">JPEG/PNG。長辺1920px・JPEG品質85%に自動圧縮されます</span>';
+      document.getElementById('event-name-field').style.display = '';
+      document.getElementById('presenters-field').style.display = '';
     }
 
+    document.getElementById('cancel-edit-btn').addEventListener('click', exitEditMode);
+
+    // 削除確認のキャンセル用（インライン領域をクリアするだけ）
     function cancelEdit(index) {
-      clearPendingImages('edit-' + index);
       document.getElementById('edit-area-' + index).innerHTML = '';
-    }
-
-    async function saveEdit(index) {
-      var cat = document.getElementById('edit-cat-' + index).value;
-
-      // 残す既存画像のパスを収集（削除フラグが立っていないもの）
-      var existingArea = document.getElementById('existing-images-' + index);
-      var keptPaths = [];
-      if (existingArea) {
-        Array.from(existingArea.querySelectorAll('.existing-image:not(.removed)')).forEach(function(el) {
-          keptPaths.push(el.dataset.path);
-        });
-      }
-
-      // 新規画像（蓄積pending）
-      var pending = pendingImages['edit-' + index] || [];
-      if (keptPaths.length + pending.length > IMAGE_LIMIT) {
-        alert('画像は合計' + IMAGE_LIMIT + '枚までです');
-        return;
-      }
-
-      try {
-        var newImagesB64 = [];
-        for (var i = 0; i < pending.length; i++) {
-          newImagesB64.push(await compressImageToBase64(pending[i].file));
-        }
-
-        var entry = {
-          date: document.getElementById('edit-date-' + index).value,
-          category: cat,
-          category_en: CATEGORY_EN[cat] || cat,
-          title: document.getElementById('edit-title-ja-' + index).value,
-          title_en: document.getElementById('edit-title-en-' + index).value,
-          url: document.getElementById('edit-url-' + index).value.trim(),
-          paper_title: document.getElementById('edit-paper-title-' + index).value.trim(),
-          doi: document.getElementById('edit-doi-' + index).value.trim(),
-          body: document.getElementById('edit-body-ja-' + index).value,
-          body_en: document.getElementById('edit-body-en-' + index).value,
-          images: keptPaths,
-          new_images: newImagesB64
-        };
-
-        sendAction({ action: 'edit', index: index, entry: entry }, '編集しました', function() {
-          clearPendingImages('edit-' + index);
-          loadNews();
-        });
-      } catch (err) {
-        showMessage('error', '画像処理に失敗しました: ' + err.message);
-      }
     }
 
     // ── 削除 ──
     function confirmDelete(index) {
+      if (editingIndex !== null) {
+        alert('編集中は削除できません。先に編集をキャンセルまたは保存してください。');
+        return;
+      }
       var area = document.getElementById('edit-area-' + index);
       area.innerHTML =
         '<div class="confirm-delete">' +
@@ -668,13 +641,18 @@
       sendAction({ action: 'delete', index: index }, '削除しました', function() { loadNews(); });
     }
 
-    // ── 新規投稿 ──
-    // 画像プレビュー: 都度の選択を追記し、各サムネに×ボタンを付ける
+    // ── 投稿 / 編集 共通の画像プレビュー ──
+    // 都度の選択を追記し、各サムネに×ボタンを付ける
     document.getElementById('images').addEventListener('change', function() {
-      var available = IMAGE_LIMIT - (pendingImages['new'] || []).length;
+      var keptCount = 0;
+      if (editingIndex !== null) {
+        var existingArea = document.getElementById('existing-images-area');
+        keptCount = existingArea ? existingArea.querySelectorAll('.existing-image:not(.removed)').length : 0;
+      }
+      var available = IMAGE_LIMIT - keptCount - (pendingImages['new'] || []).length;
       var newFiles = Array.from(this.files);
       if (newFiles.length > available) {
-        alert('画像は合計' + IMAGE_LIMIT + '枚までです（残り' + available + '枚追加可能）');
+        alert('画像は合計' + IMAGE_LIMIT + '枚までです（残り' + Math.max(0, available) + '枚追加可能）');
         newFiles = newFiles.slice(0, Math.max(0, available));
       }
       appendPendingImages('new', newFiles);
@@ -685,39 +663,57 @@
     document.getElementById('news-form').addEventListener('submit', async function(e) {
       e.preventDefault();
       var btn = document.getElementById('submit-btn');
-      btn.disabled = true; btn.textContent = '送信中...';
+      var isEdit = editingIndex !== null;
+      var defaultLabel = isEdit ? '保存する' : '投稿する';
+      btn.disabled = true; btn.textContent = isEdit ? '保存中...' : '送信中...';
 
       try {
         var cat = document.getElementById('category').value;
         var dateVal = document.getElementById('date').value;
-        var eventName = document.getElementById('event_name').value.trim();
-        var presentersVal = document.getElementById('presenters').value.trim();
         var manualBody = document.getElementById('body_ja').value;
 
-        // 学会名が入力されていれば招待講演の本文を自動生成
+        // 学会名が入力されていれば招待講演の本文を自動生成（新規投稿時のみ）
         var bodyJa = manualBody;
-        if (eventName) {
-          var lines = [];
-          lines.push('学会名：' + eventName);
-          if (dateVal) lines.push('日時：' + formatDateJa(dateVal));
-          if (presentersVal) lines.push('発表者：' + presentersVal);
-          if (manualBody) lines.push(manualBody);
-          bodyJa = lines.join('\n');
+        if (!isEdit) {
+          var eventName = document.getElementById('event_name').value.trim();
+          var presentersVal = document.getElementById('presenters').value.trim();
+          if (eventName) {
+            var lines = [];
+            lines.push('学会名：' + eventName);
+            if (dateVal) lines.push('日時：' + formatDateJa(dateVal));
+            if (presentersVal) lines.push('発表者：' + presentersVal);
+            if (manualBody) lines.push(manualBody);
+            bodyJa = lines.join('\n');
+          }
+        }
+
+        // 編集モードでは残す既存画像のパスを収集
+        var keptPaths = [];
+        if (isEdit) {
+          var existingArea = document.getElementById('existing-images-area');
+          Array.from(existingArea.querySelectorAll('.existing-image:not(.removed)')).forEach(function(el) {
+            keptPaths.push(el.dataset.path);
+          });
+        }
+
+        var pending = pendingImages['new'] || [];
+        if (keptPaths.length + pending.length > IMAGE_LIMIT) {
+          alert('画像は合計' + IMAGE_LIMIT + '枚までです');
+          btn.disabled = false; btn.textContent = defaultLabel;
+          return;
         }
 
         // 画像を圧縮
-        var pending = pendingImages['new'] || [];
         var newImagesB64 = [];
         if (pending.length > 0) {
           btn.textContent = '画像を圧縮中...';
           for (var i = 0; i < pending.length; i++) {
             newImagesB64.push(await compressImageToBase64(pending[i].file));
           }
-          btn.textContent = '送信中...';
+          btn.textContent = isEdit ? '保存中...' : '送信中...';
         }
 
-        var payload = {
-          action: 'add',
+        var entry = {
           date: dateVal,
           category: cat,
           category_en: CATEGORY_EN[cat] || cat,
@@ -728,22 +724,32 @@
           doi: document.getElementById('doi').value.trim(),
           body: bodyJa,
           body_en: document.getElementById('body_en').value,
-          images: [],
+          images: keptPaths,
           new_images: newImagesB64
         };
 
-        sendAction(payload, '投稿しました', function() {
-          document.getElementById('news-form').reset();
-          if (newPostDatePicker) newPostDatePicker.clear();
-          clearPendingImages('new');
-          document.getElementById('image-preview-area').innerHTML = '';
-          loadNews();
-        }, function() {
-          btn.disabled = false; btn.textContent = '投稿する';
-        });
+        if (isEdit) {
+          sendAction({ action: 'edit', index: editingIndex, entry: entry }, '編集しました', function() {
+            exitEditMode();
+            loadNews();
+          }, function() {
+            btn.disabled = false; btn.textContent = defaultLabel;
+          });
+        } else {
+          entry.action = 'add';
+          sendAction(entry, '投稿しました', function() {
+            document.getElementById('news-form').reset();
+            if (newPostDatePicker) newPostDatePicker.clear();
+            clearPendingImages('new');
+            document.getElementById('image-preview-area').innerHTML = '';
+            loadNews();
+          }, function() {
+            btn.disabled = false; btn.textContent = defaultLabel;
+          });
+        }
       } catch (err) {
         showMessage('error', '画像処理に失敗しました: ' + err.message);
-        btn.disabled = false; btn.textContent = '投稿する';
+        btn.disabled = false; btn.textContent = defaultLabel;
       }
     });
 
@@ -771,8 +777,6 @@
         showMessage('error', '失敗しました: ' + err.message);
       })
       .finally(function() {
-        var btn = document.getElementById('submit-btn');
-        btn.disabled = false; btn.textContent = '投稿する';
         if (onFinally) onFinally();
       });
     }
