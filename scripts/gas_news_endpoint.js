@@ -65,6 +65,10 @@ function doPost(e) {
       result = editNews(data.index, data.entry);
     } else if (action === "delete") {
       result = deleteNews(data.index);
+    } else if (action === "translate") {
+      var translated = LanguageApp.translate(data.text || "", "ja", "en");
+      return ContentService.createTextOutput(JSON.stringify({ status: "ok", text: translated }))
+        .setMimeType(ContentService.MimeType.JSON);
     } else {
       throw new Error("Unknown action: " + action);
     }

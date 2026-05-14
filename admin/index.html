@@ -79,6 +79,14 @@
     .form-actions { display: flex; gap: 0.5rem; align-items: center; }
     .form-actions #submit-btn { flex: 1; width: auto; }
     .form-actions #cancel-edit-btn { flex: 0 0 auto; }
+    /* 翻訳ボタン */
+    .label-with-action { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+    .btn-translate {
+      font-size: 0.7rem; padding: 0.2rem 0.6rem; background: #f5f5f5; color: #555;
+      border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-weight: 400;
+    }
+    .btn-translate:hover { background: #e8e8e8; }
+    .btn-translate:disabled { opacity: 0.6; cursor: not-allowed; }
     .confirm-delete { margin-top: 0.5rem; padding: 0.6rem; background: #fff5f5; border-radius: 4px; font-size: 0.82rem; color: #c62828; display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
     .confirm-delete .btn { margin-left: 0; }
     /* 画像 */
@@ -215,7 +223,10 @@
               <input type="text" id="title_ja">
             </div>
             <div class="field">
-              <label>タイトル（英語）</label>
+              <label class="label-with-action">
+                <span>タイトル（英語）</span>
+                <button type="button" class="btn-translate" onclick="translateField('title_ja', 'title_en', this)">→ 日本語から翻訳</button>
+              </label>
               <input type="text" id="title_en">
             </div>
             <div class="field">
@@ -243,7 +254,10 @@
               <textarea id="body_ja"></textarea>
             </div>
             <div class="field">
-              <label>本文（英語）<span class="hint">Links: &lt;a href="URL" target="_blank"&gt;text&lt;/a&gt;</span></label>
+              <label class="label-with-action">
+                <span>本文（英語）<span class="hint">Links: &lt;a href="URL" target="_blank"&gt;text&lt;/a&gt;</span></span>
+                <button type="button" class="btn-translate" onclick="translateField('body_ja', 'body_en', this)">→ 日本語から翻訳</button>
+              </label>
               <textarea id="body_en"></textarea>
             </div>
             <div class="field" id="existing-images-field" style="display:none">
@@ -616,6 +630,41 @@
     }
 
     document.getElementById('cancel-edit-btn').addEventListener('click', exitEditMode);
+
+    // ── 翻訳（日本語 → 英語） ──
+    // GAS の LanguageApp.translate を呼び出して翻訳結果を英語フィールドに反映する。
+    async function translateField(srcId, dstId, btnEl) {
+      var src = (document.getElementById(srcId).value || '').trim();
+      var dstEl = document.getElementById(dstId);
+      if (!src) {
+        alert('翻訳元の日本語を入力してください');
+        return;
+      }
+      if ((dstEl.value || '').trim() && !confirm('既存の英語テキストを翻訳結果で上書きしますか？')) {
+        return;
+      }
+      var originalLabel = btnEl.textContent;
+      btnEl.disabled = true;
+      btnEl.textContent = '翻訳中...';
+      try {
+        var res = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'translate', text: src, auth: getAuthHash() })
+        });
+        var json = await res.json();
+        if (json.status !== 'ok') {
+          if (json.message === 'Unauthorized') { lockUI(); return; }
+          throw new Error(json.message || '翻訳に失敗しました');
+        }
+        dstEl.value = json.text || '';
+      } catch (err) {
+        showMessage('error', '翻訳に失敗しました: ' + err.message);
+      } finally {
+        btnEl.disabled = false;
+        btnEl.textContent = originalLabel;
+      }
+    }
 
     // 削除確認のキャンセル用（インライン領域をクリアするだけ）
     function cancelEdit(index) {
