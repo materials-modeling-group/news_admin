@@ -175,15 +175,85 @@ function normalizeEntry(data, finalImages) {
   };
 }
 
+// ── 重複検出 ヘルパー ──
+// 同じDOI、または 同じ日付+同じ正規化タイトル の既存エントリを探す。
+// 見つかった場合は index、なければ -1 を返す。
+function _normTitle(s) {
+  if (!s) return "";
+  return s.toString().toLowerCase()
+    .replace(/[\s　]+/g, "")
+    .replace(/[「」『』【】（）\(\)・,，、。．\.]/g, "");
+}
+function _normDoi(doi) {
+  if (!doi) return "";
+  return doi.toString().toLowerCase()
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
+    .trim();
+}
+function findDuplicateIndex(list, entry) {
+  var newTitle = _normTitle(entry.title);
+  var newDate = entry.date || "";
+  var newDoi = _normDoi(entry.doi);
+  for (var i = 0; i < list.length; i++) {
+    if (newDoi && _normDoi(list[i].doi) === newDoi) {
+      return i;
+    }
+    if (newTitle && (list[i].date || "") === newDate && _normTitle(list[i].title) === newTitle) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+// 情報量スコア（高いほど完全）
+function completenessScore(entry) {
+  var s = 0;
+  if (entry.title_en) s += 2;
+  if (entry.url) s += 1;
+  if (entry.paper_title) s += 2;
+  if (entry.doi) s += 2;
+  s += Math.min(10, Math.floor(((entry.body || "").length) / 50));
+  s += Math.min(5, Math.floor(((entry.body_en || "").length) / 50));
+  if (entry.images && entry.images.length) s += entry.images.length * 2;
+  return s;
+}
+
 // ── 追加 ──
+// 重複検出: 既存と同じDOIまたは(日付,タイトル)の記事がある場合、
+//   - 新規記事の方が情報量が多ければ既存を置換
+//   - 既存以下なら投稿をスキップ
 function addNews(newsItem) {
   var list = getNewsFromGitHub();
   var newImages = prepareNewImages(newsItem.date, newsItem.new_images);
   var imagePaths = (newsItem.images || []).concat(newImages.map(function (i) { return i.path; }));
   var entry = normalizeEntry(newsItem, imagePaths);
+
+  var dupIndex = findDuplicateIndex(list, entry);
+  if (dupIndex >= 0) {
+    var newScore = completenessScore(entry);
+    var oldScore = completenessScore(list[dupIndex]);
+    if (newScore > oldScore) {
+      // 既存より情報量が多い → 置換（既存の画像は不要なら削除）
+      var oldImages = list[dupIndex].images || [];
+      var newImagePathSet = {};
+      imagePaths.forEach(function (p) { newImagePathSet[p] = true; });
+      var deletedImages = oldImages.filter(function (p) { return !newImagePathSet[p]; });
+      list[dupIndex] = entry;
+      list.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
+      var sha = commitChanges(list, newImages, deletedImages,
+        "ニュースを置換（重複検出）: " + (entry.title || "no title"));
+      return { action: "replaced", index: dupIndex, sha: sha };
+    } else {
+      // 既存以下 → スキップ（commitしない＝新規画像もアップロードされない）
+      return { action: "skipped", reason: "duplicate", index: dupIndex };
+    }
+  }
+
+  // 重複なし: 通常通り先頭に追加
   list.unshift(entry);
   list.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
-  return commitChanges(list, newImages, [], "ニュースを追加: " + (entry.title || "no title"));
+  var sha = commitChanges(list, newImages, [], "ニュースを追加: " + (entry.title || "no title"));
+  return { action: "added", sha: sha };
 }
 
 // ── 編集 ──

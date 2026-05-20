@@ -819,7 +819,14 @@
           }
           throw new Error(res.message);
         }
-        showMessage('success', successMsg + '（反映まで数分かかります）');
+        // 投稿/編集アクションの結果に応じてメッセージを切り替える
+        var msg = successMsg + '（反映まで数分かかります）';
+        if (res.result && res.result.action === 'replaced') {
+          msg = '重複を検出: 既存記事の方が情報不足のため置き換えました（反映まで数分かかります）';
+        } else if (res.result && res.result.action === 'skipped') {
+          msg = '重複検出のためスキップしました（既存記事の方が情報量が同等以上です）';
+        }
+        showMessage('success', msg);
         if (onSuccess) onSuccess();
       })
       .catch(function(err) {
