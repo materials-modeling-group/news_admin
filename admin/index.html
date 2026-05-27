@@ -285,7 +285,7 @@
     // ── 認証 ──
     // 認証情報の正解（ハッシュ）はGASのスクリプトプロパティ ADMIN_AUTH_HASH に保管されている。
     // クライアント側にはハッシュを置かず、ログイン時にGASに照会して検証する。
-    var GAS_URL = 'https://script.google.com/macros/s/AKfycbyO7_Q-6O0097dqLvbUaVCSRYyoRUi3hsM-5k9dJA30q_PPL6Hy98sXEhREcCA5q4Yl/exec';
+    var GAS_URL = 'https://script.google.com/macros/s/AKfycbyeKlEkXdTTiXgJ-Gb9kCEEgkNV8kgp65ZBLCzBODb8-Hlxx7jqMIxLLDq9axczUc09/exec';
 
     async function sha256(text) {
       var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
