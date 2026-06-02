@@ -19,7 +19,12 @@ jobs:
           python-version: '3.12'
 
       - name: Check for new invited talks via SAMURAI
+        env:
+          GAS_AUTH_HASH: ${{ secrets.GAS_AUTH_HASH }}
         run: python3 scripts/check_invited_talks.py
+
+      - name: Pull remote changes (GAS may have committed)
+        run: git pull --rebase --autostash origin main
 
       - name: Check for changes in known_talk_ids
         id: diff

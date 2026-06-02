@@ -24,9 +24,10 @@ SAMURAI_BASE = "https://samurai.nims.go.jp"
 
 DEFAULT_GAS_URL = (
     "https://script.google.com/macros/s/"
-    "AKfycbx_u67JnXKn5Fb3tcD6fQyn1as28Im6gcgdK7Mb9UAD6V3jCS2-Qn7tJYK14P9UN6qB/exec"
+    "AKfycbyeKlEkXdTTiXgJ-Gb9kCEEgkNV8kgp65ZBLCzBODb8-Hlxx7jqMIxLLDq9axczUc09/exec"
 )
 GAS_URL = os.environ.get("GAS_URL", DEFAULT_GAS_URL)
+GAS_AUTH_HASH = os.environ.get("GAS_AUTH_HASH", "")
 
 LOOKBACK_YEARS = 1
 POST_DELAY = 10
@@ -170,6 +171,7 @@ def fetch_presentation_date(talk_id):
 def post_to_gas(entry):
     payload = {
         "action": "add",
+        "auth": GAS_AUTH_HASH,
         "date": entry["date"],
         "category": entry["category"],
         "category_en": entry["category_en"],
@@ -240,6 +242,10 @@ def build_news_entry(researcher, talk, date_iso, date_ja):
 
 
 def main():
+    if not GAS_AUTH_HASH:
+        print("ERROR: GAS_AUTH_HASH environment variable is required", file=sys.stderr)
+        sys.exit(1)
+
     researchers = load_json(RESEARCHERS_PATH)
     known_ids = set(load_json(KNOWN_TALKS_PATH))
 
