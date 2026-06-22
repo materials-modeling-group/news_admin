@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: check-invited-talks
+  cancel-in-progress: false
+
 jobs:
   check-invited-talks:
     runs-on: ubuntu-latest

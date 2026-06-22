@@ -21,6 +21,9 @@ RESEARCHERS_PATH = DATA_DIR / "researchers.json"
 KNOWN_TALKS_PATH = DATA_DIR / "known_talk_ids.json"
 
 SAMURAI_BASE = "https://samurai.nims.go.jp"
+HOMEPAGE_NEWS_URL = (
+    "https://raw.githubusercontent.com/materials-modeling-group/homepage/main/data/news.json"
+)
 
 DEFAULT_GAS_URL = (
     "https://script.google.com/macros/s/"
@@ -241,6 +244,27 @@ def build_news_entry(researcher, talk, date_iso, date_ja):
     }
 
 
+def fetch_existing_news():
+    """GitHubのnews.jsonを取得して (date, normalized_title) のセットを返す"""
+    req = urllib.request.Request(
+        HOMEPAGE_NEWS_URL,
+        headers={"User-Agent": "GroupHomepage/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"WARNING: Could not fetch existing news: {e}", file=sys.stderr)
+        return set()
+    result = set()
+    for item in data:
+        date = item.get("date", "")
+        title = item.get("title", "").strip()
+        if date and title:
+            result.add((date, title))
+    return result
+
+
 def main():
     if not GAS_AUTH_HASH:
         print("ERROR: GAS_AUTH_HASH environment variable is required", file=sys.stderr)
@@ -248,6 +272,10 @@ def main():
 
     researchers = load_json(RESEARCHERS_PATH)
     known_ids = set(load_json(KNOWN_TALKS_PATH))
+
+    print("Fetching existing news entries for deduplication...")
+    existing_news = fetch_existing_news()
+    print(f"  {len(existing_news)} existing entries loaded")
 
     min_year = datetime.now().year - LOOKBACK_YEARS
     print(f"Checking invited talks from SAMURAI (year >= {min_year})")
@@ -280,6 +308,15 @@ def main():
 
             # 個別ページから日付を取得
             date_iso, date_ja = fetch_presentation_date(talk_id)
+
+            # news.json上の既存エントリと照合（UUID変更による重複を防ぐ）
+            candidate_entry = build_news_entry(researcher, talk, date_iso, date_ja)
+            candidate_key = (candidate_entry["date"], candidate_entry["title"].strip())
+            if candidate_key in existing_news:
+                print(f"  Skip (already in news.json): {talk['title'][:50]}...")
+                known_ids.add(talk_id)
+                continue
+
             if date_iso:
                 print(f"  NEW: {talk['title'][:50]}... ({date_ja})")
             else:
@@ -287,33 +324,39 @@ def main():
 
             new_talks.append((researcher, talk, date_iso, date_ja, talk_id))
             known_ids.add(talk_id)
+            existing_news.add(candidate_key)
             time.sleep(1)
 
         time.sleep(1)
 
     if not new_talks:
         print("\nNo new invited talks found.")
+        # news.json照合でスキップしたIDが追加されている場合も保存する
+        original_ids = set(load_json(KNOWN_TALKS_PATH))
+        if known_ids != original_ids:
+            save_json(KNOWN_TALKS_PATH, sorted(known_ids))
+            print(f"Updated known_talk_ids with {len(known_ids) - len(original_ids)} skipped ID(s)")
         return
 
     # GAS経由で投稿
-    posted_ids = []
+    posted_count = 0
     for i, (researcher, talk, date_iso, date_ja, talk_id) in enumerate(new_talks):
         entry = build_news_entry(researcher, talk, date_iso, date_ja)
         try:
             print(f"\nPosting [{i+1}/{len(new_talks)}]: {talk['title'][:50]}...")
             post_to_gas(entry)
-            posted_ids.append(talk_id)
+            posted_count += 1
             print(f"  OK")
         except Exception as e:
             print(f"  ERROR posting: {e}")
+            known_ids.discard(talk_id)
 
         if i < len(new_talks) - 1:
             time.sleep(POST_DELAY)
 
-    all_ids = sorted(set(load_json(KNOWN_TALKS_PATH)) | set(posted_ids))
-    save_json(KNOWN_TALKS_PATH, all_ids)
+    save_json(KNOWN_TALKS_PATH, sorted(known_ids))
 
-    print(f"\nPosted {len(posted_ids)}/{len(new_talks)} invited talk(s) via Admin")
+    print(f"\nPosted {posted_count}/{len(new_talks)} invited talk(s) via Admin")
 
 
 if __name__ == "__main__":
