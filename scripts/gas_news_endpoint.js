@@ -69,6 +69,12 @@ function doPost(e) {
       var translated = LanguageApp.translate(data.text || "", "ja", "en");
       return ContentService.createTextOutput(JSON.stringify({ status: "ok", text: translated }))
         .setMimeType(ContentService.MimeType.JSON);
+    } else if (action === "research_get") {
+      result = getResearchFromGitHub();
+      return ContentService.createTextOutput(JSON.stringify({ status: "ok", data: result }))
+        .setMimeType(ContentService.MimeType.JSON);
+    } else if (action === "research_save") {
+      result = saveResearch(data.body_ja || "", data.body_en || "", data.new_images || []);
     } else {
       throw new Error("Unknown action: " + action);
     }
@@ -268,6 +274,67 @@ function editNews(index, updatedEntry) {
   list[index] = normalizeEntry(updatedEntry, finalImages);
   list.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
   return commitChanges(list, newImages, deletedImages, "ニュースを編集: " + (updatedEntry.title || "no title"));
+}
+
+// ── Research: Markdown取得 ──
+// data/research.md と data/research-en.md を読み、両方を返す。
+// ファイルが未作成の場合は空文字を返す。
+function getResearchFromGitHub() {
+  return {
+    body_ja: _getFileContentOrEmpty("data/research.md"),
+    body_en: _getFileContentOrEmpty("data/research-en.md")
+  };
+}
+
+function _getFileContentOrEmpty(path) {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty("GITHUB_TOKEN");
+  var repo = props.getProperty("GITHUB_REPO");
+  var url = "https://api.github.com/repos/" + repo + "/contents/" + path + "?ref=main";
+  var resp = UrlFetchApp.fetch(url, {
+    method: "GET",
+    headers: { Authorization: "Bearer " + token, Accept: "application/vnd.github.v3+json" },
+    muteHttpExceptions: true
+  });
+  var code = resp.getResponseCode();
+  if (code === 404) return "";
+  if (code < 200 || code >= 300) {
+    throw new Error("GitHub API GET " + path + " " + code + ": " + resp.getContentText());
+  }
+  var info = JSON.parse(resp.getContentText());
+  return Utilities.newBlob(Utilities.base64Decode(info.content)).getDataAsString();
+}
+
+// ── Research: Markdown保存 ──
+// 日本語・英語のMarkdownと、新規アップロード画像を1コミットにまとめて反映する。
+// new_images: [{ base64, filename }] — filename拡張子で保存パスを決定
+function saveResearch(bodyJa, bodyEn, newImages) {
+  var ref = ghApi("GET", "git/ref/heads/main");
+  var parentSha = ref.object.sha;
+  var parentCommit = ghApi("GET", "git/commits/" + parentSha);
+  var baseTree = parentCommit.tree.sha;
+
+  var jaBlob = ghApi("POST", "git/blobs", { content: bodyJa, encoding: "utf-8" });
+  var enBlob = ghApi("POST", "git/blobs", { content: bodyEn, encoding: "utf-8" });
+
+  var treeItems = [
+    { path: "data/research.md", mode: "100644", type: "blob", sha: jaBlob.sha },
+    { path: "data/research-en.md", mode: "100644", type: "blob", sha: enBlob.sha }
+  ];
+
+  (newImages || []).forEach(function (img) {
+    var b = ghApi("POST", "git/blobs", { content: img.base64, encoding: "base64" });
+    treeItems.push({ path: img.path, mode: "100644", type: "blob", sha: b.sha });
+  });
+
+  var newTree = ghApi("POST", "git/trees", { base_tree: baseTree, tree: treeItems });
+  var commit = ghApi("POST", "git/commits", {
+    message: "Research ページを更新",
+    tree: newTree.sha,
+    parents: [parentSha]
+  });
+  ghApi("PATCH", "git/refs/heads/main", { sha: commit.sha });
+  return { action: "saved", sha: commit.sha };
 }
 
 // ── 削除 ──

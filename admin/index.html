@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>News Admin - Materials Modeling Group</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
   <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/ja.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Noto Sans JP', 'Inter', sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
@@ -150,6 +152,31 @@
     .login-box .btn-login:hover { background: #a02e22; }
     .login-error { color: #c62828; font-size: 0.8rem; margin-top: 0.8rem; display: none; }
     .admin-content.locked { display: none; }
+    /* タブ */
+    .tabs { display: flex; gap: 0.3rem; border-bottom: 2px solid #eee; margin-bottom: 1.5rem; }
+    .tab-btn {
+      background: none; border: none; padding: 0.7rem 1.4rem; font-size: 0.9rem;
+      font-weight: 600; color: #999; cursor: pointer; border-bottom: 2px solid transparent;
+      margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: #666; }
+    .tab-btn.active { color: #c83c2d; border-bottom-color: #c83c2d; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    /* Research エディタ */
+    .research-lang-tabs { display: flex; gap: 0.3rem; margin-bottom: 0.8rem; }
+    .research-lang-btn {
+      background: #f0f0f0; border: none; padding: 0.4rem 0.9rem; font-size: 0.82rem;
+      font-weight: 600; color: #666; cursor: pointer; border-radius: 4px 4px 0 0;
+    }
+    .research-lang-btn.active { background: #fff; color: #c83c2d; box-shadow: 0 -1px 0 #c83c2d inset; }
+    .research-editor-wrap { display: none; }
+    .research-editor-wrap.active { display: block; }
+    .EasyMDEContainer { background: #fff; }
+    .EasyMDEContainer .CodeMirror { min-height: 400px; font-size: 0.88rem; }
+    .research-actions { display: flex; gap: 0.6rem; align-items: center; margin-top: 1rem; }
+    .research-actions .btn-primary { width: auto; padding: 0.6rem 1.6rem; }
+    .research-status { color: #999; font-size: 0.78rem; }
   </style>
 </head>
 <body>
@@ -175,9 +202,15 @@
 
   <!-- 管理画面本体 -->
   <div class="container admin-content locked" id="admin-content">
-    <h1>News Admin</h1>
-    <p class="subtitle">Materials Modeling Group - ニュース管理</p>
+    <h1>Site Admin</h1>
+    <p class="subtitle">Materials Modeling Group - サイト管理</p>
 
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="news" onclick="switchTab('news')">News</button>
+      <button class="tab-btn" data-tab="research" onclick="switchTab('research')">Research</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-news">
     <div class="layout">
       <!-- 左: 投稿一覧 -->
       <div class="col-list">
@@ -278,6 +311,34 @@
         </div>
         <a href="https://materials-modeling-group.github.io/homepage/" class="back-link">← ホームページに戻る</a>
       </div>
+    </div>
+    </div><!-- /#tab-news -->
+
+    <!-- Research 編集タブ -->
+    <div class="tab-panel" id="tab-research">
+      <div class="card">
+        <h2>Research ページ編集</h2>
+        <p style="font-size:0.78rem;color:#888;margin-bottom:1rem;">
+          Markdown で編集します。ツールバーの各ボタン（太字・見出し・画像挿入など）で装飾できます。画像はドラッグ&amp;ドロップまたはツールバーから追加可能。保存すると GitHub にコミットされ、数分で反映されます。
+        </p>
+        <div class="research-lang-tabs">
+          <button type="button" class="research-lang-btn active" data-lang="ja" onclick="switchResearchLang('ja')">日本語</button>
+          <button type="button" class="research-lang-btn" data-lang="en" onclick="switchResearchLang('en')">English</button>
+        </div>
+        <div class="research-editor-wrap active" id="research-editor-wrap-ja">
+          <textarea id="research-md-ja"></textarea>
+        </div>
+        <div class="research-editor-wrap" id="research-editor-wrap-en">
+          <textarea id="research-md-en"></textarea>
+        </div>
+        <div class="research-actions">
+          <button type="button" class="btn btn-primary" id="research-save-btn" onclick="saveResearch()">保存する</button>
+          <button type="button" class="btn btn-cancel" onclick="loadResearch()">再読み込み</button>
+          <span class="research-status" id="research-status"></span>
+        </div>
+        <div class="message" id="research-message"></div>
+      </div>
+      <a href="https://materials-modeling-group.github.io/homepage/research.html" target="_blank" class="back-link">Research ページを開く →</a>
     </div>
   </div>
 
@@ -839,6 +900,167 @@
 
     function showMessage(type, text) {
       var el = document.getElementById('message');
+      el.className = 'message ' + type;
+      el.textContent = text;
+    }
+
+    // ── タブ切替 ──
+    function switchTab(name) {
+      Array.from(document.querySelectorAll('.tab-btn')).forEach(function (b) {
+        b.classList.toggle('active', b.dataset.tab === name);
+      });
+      Array.from(document.querySelectorAll('.tab-panel')).forEach(function (p) {
+        p.classList.toggle('active', p.id === 'tab-' + name);
+      });
+      if (name === 'research') {
+        initResearchEditorsOnce();
+        if (!researchLoaded) loadResearch();
+      }
+    }
+
+    // ── Research エディタ ──
+    var researchEditorJa = null;
+    var researchEditorEn = null;
+    var researchLoaded = false;
+    var RESEARCH_IMAGE_PUBLIC_BASE = 'https://materials-modeling-group.github.io/homepage/';
+
+    function switchResearchLang(lang) {
+      Array.from(document.querySelectorAll('.research-lang-btn')).forEach(function (b) {
+        b.classList.toggle('active', b.dataset.lang === lang);
+      });
+      document.getElementById('research-editor-wrap-ja').classList.toggle('active', lang === 'ja');
+      document.getElementById('research-editor-wrap-en').classList.toggle('active', lang === 'en');
+      // 表示切替後にEasyMDEの再描画を促す
+      var editor = lang === 'ja' ? researchEditorJa : researchEditorEn;
+      if (editor && editor.codemirror) {
+        setTimeout(function () { editor.codemirror.refresh(); }, 10);
+      }
+    }
+
+    function makeResearchEditor(textareaId) {
+      return new EasyMDE({
+        element: document.getElementById(textareaId),
+        spellChecker: false,
+        autofocus: false,
+        status: false,
+        toolbar: [
+          'bold', 'italic', 'heading', '|',
+          'quote', 'unordered-list', 'ordered-list', '|',
+          'link', 'image', 'upload-image', '|',
+          'preview', 'side-by-side', 'fullscreen', '|',
+          'guide'
+        ],
+        uploadImage: true,
+        // ドラッグ&ドロップ・ペースト・ボタンからの画像挿入時に呼ばれる。
+        // ここではローカルで圧縮してdata URLを返し、Markdownに埋め込む。
+        // 保存時にdata URLを検出してGitHubに実ファイルとしてコミットする。
+        imageUploadFunction: async function (file, onSuccess, onError) {
+          try {
+            var b64 = await compressImageToBase64(file);
+            var dataUrl = 'data:image/jpeg;base64,' + b64;
+            onSuccess(dataUrl);
+          } catch (err) {
+            onError('画像の読み込みに失敗しました: ' + err.message);
+          }
+        }
+      });
+    }
+
+    function initResearchEditorsOnce() {
+      if (researchEditorJa) return;
+      researchEditorJa = makeResearchEditor('research-md-ja');
+      researchEditorEn = makeResearchEditor('research-md-en');
+    }
+
+    function loadResearch() {
+      var status = document.getElementById('research-status');
+      status.textContent = '読み込み中...';
+      fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'research_get', auth: getAuthHash() })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.status !== 'ok') {
+            if (res.message === 'Unauthorized') { lockUI(); return; }
+            throw new Error(res.message);
+          }
+          researchEditorJa.value(res.data.body_ja || '');
+          researchEditorEn.value(res.data.body_en || '');
+          researchLoaded = true;
+          status.textContent = '読み込み完了';
+          setTimeout(function () { status.textContent = ''; }, 2000);
+        })
+        .catch(function (err) {
+          status.textContent = '';
+          showResearchMessage('error', '読み込みに失敗しました: ' + err.message);
+        });
+    }
+
+    // 保存: Markdown中のdata URL画像を検出 → ファイルパスに置換して new_images に添付。
+    async function saveResearch() {
+      var btn = document.getElementById('research-save-btn');
+      btn.disabled = true; btn.textContent = '保存中...';
+      try {
+        var mdJa = researchEditorJa.value();
+        var mdEn = researchEditorEn.value();
+        var res1 = extractDataUrlImages(mdJa);
+        var res2 = extractDataUrlImages(mdEn);
+        var allImages = res1.images.concat(res2.images);
+        var payload = {
+          action: 'research_save',
+          auth: getAuthHash(),
+          body_ja: res1.md,
+          body_en: res2.md,
+          new_images: allImages
+        };
+        var r = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(payload)
+        });
+        var json = await r.json();
+        if (json.status !== 'ok') {
+          if (json.message === 'Unauthorized') { lockUI(); return; }
+          throw new Error(json.message);
+        }
+        // 保存が成功したら、エディタ内のdata URLも同じパスに置換しておく
+        if (allImages.length > 0) {
+          researchEditorJa.value(res1.md);
+          researchEditorEn.value(res2.md);
+        }
+        showResearchMessage('success', '保存しました（反映まで数分かかります）');
+      } catch (err) {
+        showResearchMessage('error', '保存に失敗しました: ' + err.message);
+      } finally {
+        btn.disabled = false; btn.textContent = '保存する';
+      }
+    }
+
+    // Markdown中の data:image/...;base64,... を images/research/YYYYMMDD-<uuid>.jpg に置換し、
+    // { md: 置換後Markdown, images: [{ path, base64 }, ...] } を返す。
+    function extractDataUrlImages(md) {
+      var images = [];
+      var re = /data:image\/[a-zA-Z]+;base64,([A-Za-z0-9+/=]+)/g;
+      var newMd = md.replace(re, function (_match, b64) {
+        var d = new Date();
+        var stamp = d.getFullYear() +
+          String(d.getMonth() + 1).padStart(2, '0') +
+          String(d.getDate()).padStart(2, '0') +
+          String(d.getHours()).padStart(2, '0') +
+          String(d.getMinutes()).padStart(2, '0') +
+          String(d.getSeconds()).padStart(2, '0');
+        var uuid = Math.random().toString(36).substring(2, 10);
+        var path = 'images/research/' + stamp + '-' + uuid + '.jpg';
+        images.push({ path: path, base64: b64 });
+        return RESEARCH_IMAGE_PUBLIC_BASE + path;
+      });
+      return { md: newMd, images: images };
+    }
+
+    function showResearchMessage(type, text) {
+      var el = document.getElementById('research-message');
       el.className = 'message ' + type;
       el.textContent = text;
     }
