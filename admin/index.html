@@ -163,18 +163,20 @@
     .tab-btn.active { color: #c83c2d; border-bottom-color: #c83c2d; }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
-    /* Research エディタ */
-    .research-lang-tabs { display: flex; gap: 0.3rem; margin-bottom: 0.8rem; }
-    .research-lang-btn {
-      background: #f0f0f0; border: none; padding: 0.4rem 0.9rem; font-size: 0.82rem;
-      font-weight: 600; color: #666; cursor: pointer; border-radius: 4px 4px 0 0;
+    /* Research エディタ（日英を左右に並べる） */
+    .research-editors { display: flex; gap: 1rem; align-items: flex-start; }
+    .research-editor-col { flex: 1; min-width: 0; }
+    .research-editor-head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 0.4rem; gap: 0.5rem;
     }
-    .research-lang-btn.active { background: #fff; color: #c83c2d; box-shadow: 0 -1px 0 #c83c2d inset; }
-    .research-editor-wrap { display: none; }
-    .research-editor-wrap.active { display: block; }
+    .research-editor-head label { font-size: 0.82rem; font-weight: 600; color: #1a1a1a; margin: 0; }
+    @media (max-width: 900px) {
+      .research-editors { flex-direction: column; }
+    }
     .EasyMDEContainer { background: #fff; }
-    .EasyMDEContainer .CodeMirror { min-height: 400px; font-size: 0.88rem; }
-    .research-actions { display: flex; gap: 0.6rem; align-items: center; margin-top: 1rem; }
+    .EasyMDEContainer .CodeMirror { min-height: 360px; font-size: 0.86rem; }
+    .research-actions { display: flex; gap: 0.6rem; align-items: center; margin-top: 1rem; flex-wrap: wrap; }
     .research-actions .btn-primary { width: auto; padding: 0.6rem 1.6rem; }
     .research-status { color: #999; font-size: 0.78rem; }
   </style>
@@ -321,15 +323,20 @@
         <p style="font-size:0.78rem;color:#888;margin-bottom:1rem;">
           Markdown で編集します。ツールバーの各ボタン（太字・見出し・画像挿入など）で装飾できます。画像はドラッグ&amp;ドロップまたはツールバーから追加可能。保存すると GitHub にコミットされ、数分で反映されます。
         </p>
-        <div class="research-lang-tabs">
-          <button type="button" class="research-lang-btn active" data-lang="ja" onclick="switchResearchLang('ja')">日本語</button>
-          <button type="button" class="research-lang-btn" data-lang="en" onclick="switchResearchLang('en')">English</button>
-        </div>
-        <div class="research-editor-wrap active" id="research-editor-wrap-ja">
-          <textarea id="research-md-ja"></textarea>
-        </div>
-        <div class="research-editor-wrap" id="research-editor-wrap-en">
-          <textarea id="research-md-en"></textarea>
+        <div class="research-editors">
+          <div class="research-editor-col">
+            <div class="research-editor-head">
+              <label>日本語</label>
+            </div>
+            <textarea id="research-md-ja"></textarea>
+          </div>
+          <div class="research-editor-col">
+            <div class="research-editor-head">
+              <label>English</label>
+              <button type="button" class="btn-translate" id="research-translate-btn" onclick="translateResearch()">← 日本語から翻訳</button>
+            </div>
+            <textarea id="research-md-en"></textarea>
+          </div>
         </div>
         <div class="research-actions">
           <button type="button" class="btn btn-primary" id="research-save-btn" onclick="saveResearch()">保存する</button>
@@ -924,16 +931,39 @@
     var researchLoaded = false;
     var RESEARCH_IMAGE_PUBLIC_BASE = 'https://materials-modeling-group.github.io/homepage/';
 
-    function switchResearchLang(lang) {
-      Array.from(document.querySelectorAll('.research-lang-btn')).forEach(function (b) {
-        b.classList.toggle('active', b.dataset.lang === lang);
-      });
-      document.getElementById('research-editor-wrap-ja').classList.toggle('active', lang === 'ja');
-      document.getElementById('research-editor-wrap-en').classList.toggle('active', lang === 'en');
-      // 表示切替後にEasyMDEの再描画を促す
-      var editor = lang === 'ja' ? researchEditorJa : researchEditorEn;
-      if (editor && editor.codemirror) {
-        setTimeout(function () { editor.codemirror.refresh(); }, 10);
+    // 日本語エディタの内容を GAS の LanguageApp.translate で英訳して英語エディタに反映する。
+    // 既存の英語テキストがあれば上書き確認する。
+    async function translateResearch() {
+      var btn = document.getElementById('research-translate-btn');
+      var src = (researchEditorJa.value() || '').trim();
+      if (!src) {
+        alert('翻訳元の日本語を入力してください');
+        return;
+      }
+      var existing = (researchEditorEn.value() || '').trim();
+      if (existing && !confirm('既存の英語テキストを翻訳結果で上書きしますか？')) {
+        return;
+      }
+      var originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '翻訳中...';
+      try {
+        var res = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'translate', text: src, auth: getAuthHash() })
+        });
+        var json = await res.json();
+        if (json.status !== 'ok') {
+          if (json.message === 'Unauthorized') { lockUI(); return; }
+          throw new Error(json.message || '翻訳に失敗しました');
+        }
+        researchEditorEn.value(json.text || '');
+      } catch (err) {
+        showResearchMessage('error', '翻訳に失敗しました: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
       }
     }
 
