@@ -9,15 +9,6 @@
     "samurai_id": "demura_masahiko"
   },
   {
-    "name_ja": "石井真史",
-    "name_en": "Masashi Ishii",
-    "position_ja": "主席研究員",
-    "position_en": "Senior Researcher",
-    "orcid": "0000-0003-0357-2832",
-    "researchmap_id": "ishiimasashi",
-    "samurai_id": "ishii_masashi"
-  },
-  {
     "name_ja": "戸田佳明",
     "name_en": "Yoshiaki Toda",
     "position_ja": "主幹研究員",
@@ -61,5 +52,14 @@
     "orcid": "0000-0001-6944-0803",
     "researchmap_id": "hiroshikakinuma",
     "samurai_id": "kakinuma_hiroshi"
+  },
+  {
+    "name_ja": "齋藤圭",
+    "name_en": "Kei Saito",
+    "position_ja": "博士研究員",
+    "position_en": "Postdoctoral Researcher",
+    "orcid": "0000-0001-8369-4797",
+    "researchmap_id": "",
+    "samurai_id": "saito_kei"
   }
 ]
